@@ -9,7 +9,9 @@ import { LoadingError, QuestionNotFoundError } from 'components/ErrorState';
 import { Probability } from 'components/Probability/Probability';
 import { QuestionDetailsCard } from 'components/QuestionDetailsCard';
 import { LoaderCard } from 'components/QuestionDetailsCard/LoaderCard';
+import { SEO } from 'components/SEO';
 import { BROKEN_MARKETS, INVALID_ANSWER_HEX } from 'constants/index';
+import { getMarketDescription } from 'constants/seo';
 
 const isMarketBroken = (market: FixedProductMarketMaker) =>
   BROKEN_MARKETS.indexOf(market.id) !== -1;
@@ -28,25 +30,52 @@ const QuestionPage = () => {
     select: (data) => data.fixedProductMarketMaker,
   });
 
+  const seoTitle = data?.title || 'Prediction Market';
+  const seoDescription = data ? getMarketDescription(data.title, data.outcomes) : undefined;
+
   if (isLoading)
     return (
-      <Flex vertical>
-        <LoaderCard />
-      </Flex>
+      <>
+        <SEO title="Loading..." />
+        <Flex vertical>
+          <LoaderCard />
+        </Flex>
+      </>
     );
 
-  if (isError) return <LoadingError />;
+  if (isError)
+    return (
+      <>
+        <SEO title="Error" noIndex />
+        <LoadingError />
+      </>
+    );
 
   if (isFetched) {
-    if (!data) return <QuestionNotFoundError />;
-    if (isMarketInvalid(data) || isMarketBroken(data)) return <QuestionNotFoundError />;
+    if (!data)
+      return (
+        <>
+          <SEO title="Market Not Found" noIndex />
+          <QuestionNotFoundError />
+        </>
+      );
+    if (isMarketInvalid(data) || isMarketBroken(data))
+      return (
+        <>
+          <SEO title="Market Not Found" noIndex />
+          <QuestionNotFoundError />
+        </>
+      );
 
     return (
-      <Flex vertical gap={40} align="center" className="flex-auto">
-        <QuestionDetailsCard market={data} />
-        <Probability marketId={data.id} outcomes={data.outcomes} />
-        <MarketActivity marketId={data.id} />
-      </Flex>
+      <>
+        <SEO title={seoTitle} description={seoDescription} />
+        <Flex vertical gap={40} align="center" className="flex-auto">
+          <QuestionDetailsCard market={data} />
+          <Probability marketId={data.id} outcomes={data.outcomes} />
+          <MarketActivity marketId={data.id} />
+        </Flex>
+      </>
     );
   }
   return null;

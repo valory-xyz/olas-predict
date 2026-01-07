@@ -10,8 +10,10 @@ import { LiveAgentsBanner } from 'components/LiveAgentsBanner';
 import { Pagination } from 'components/Pagination';
 import { QuestionCard } from 'components/QuestionCard';
 import { LoaderCard } from 'components/QuestionCard/LoaderCard';
+import { SEO } from 'components/SEO';
 import { DEFAULT_STATE_FILTER, STATE_FILTER_VALUES } from 'constants/filters';
 import { PAGE_QUERY_PARAM, STATE_QUERY_PARAM } from 'constants/index';
+import { SEO_CONFIG } from 'constants/seo';
 import { MEDIA_QUERY } from 'constants/theme';
 import { useScreen } from 'hooks/useScreen';
 
@@ -26,6 +28,31 @@ const Filters = styled(Segmented)`
 
 const ITEMS_PER_PAGE = 5;
 
+const getSEOContent = (state: string) => {
+  switch (state) {
+    case 'opened':
+      return {
+        title: SEO_CONFIG.pages.questionsOpened.title,
+        description: SEO_CONFIG.pages.questionsOpened.description,
+      };
+    case 'closed':
+      return {
+        title: SEO_CONFIG.pages.questionsClosed.title,
+        description: SEO_CONFIG.pages.questionsClosed.description,
+      };
+    case 'finalized':
+      return {
+        title: SEO_CONFIG.pages.questionsFinalized.title,
+        description: SEO_CONFIG.pages.questionsFinalized.description,
+      };
+    default:
+      return {
+        title: SEO_CONFIG.pages.questions.title,
+        description: SEO_CONFIG.pages.questions.description,
+      };
+  }
+};
+
 const QuestionsPage = () => {
   const { isMobile } = useScreen();
   const router = useRouter();
@@ -33,6 +60,8 @@ const QuestionsPage = () => {
   const stateParam = searchParams.get(STATE_QUERY_PARAM) || DEFAULT_STATE_FILTER;
   const pageParam = searchParams.get(PAGE_QUERY_PARAM);
   const page = pageParam ? +pageParam : 1;
+
+  const seoContent = getSEOContent(stateParam);
 
   // Current page data
   const { data, isLoading, isError } = useQuery({
@@ -73,26 +102,33 @@ const QuestionsPage = () => {
   };
 
   return (
-    <Flex vertical gap={isMobile ? 16 : 40} align="center" className="flex-auto">
-      <LiveAgentsBanner />
+    <>
+      <SEO title={seoContent.title} description={seoContent.description} />
+      <Flex vertical gap={isMobile ? 16 : 40} align="center" className="flex-auto">
+        <LiveAgentsBanner />
 
-      {isError ? (
-        <LoadingError />
-      ) : (
-        <>
-          <Filters value={stateParam} onChange={handleFilterChange} options={STATE_FILTER_VALUES} />
+        {isError ? (
+          <LoadingError />
+        ) : (
+          <>
+            <Filters
+              value={stateParam}
+              onChange={handleFilterChange}
+              options={STATE_FILTER_VALUES}
+            />
 
-          {isLoading &&
-            Array.from({ length: ITEMS_PER_PAGE }).map((_, index) => (
-              <LoaderCard key={Number(index)} />
-            ))}
+            {isLoading &&
+              Array.from({ length: ITEMS_PER_PAGE }).map((_, index) => (
+                <LoaderCard key={Number(index)} />
+              ))}
 
-          {markets?.map((market) => <QuestionCard market={market} key={market.id} />)}
+            {markets?.map((market) => <QuestionCard market={market} key={market.id} />)}
 
-          <Pagination hasMore={!!hasMoreMarkets} />
-        </>
-      )}
-    </Flex>
+            <Pagination hasMore={!!hasMoreMarkets} />
+          </>
+        )}
+      </Flex>
+    </>
   );
 };
 
