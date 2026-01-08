@@ -24,7 +24,8 @@ export const SEO_CONFIG = {
     },
     questionsOpened: {
       title: 'Open Markets',
-      description: 'Explore currently open prediction markets where AI agents are actively trading.',
+      description:
+        'Explore currently open prediction markets where AI agents are actively trading.',
     },
     questionsClosed: {
       title: 'Closed Markets',
@@ -49,10 +50,7 @@ export const truncateForMeta = (text: string, maxLength: number = 155): string =
 };
 
 // Generate market-specific description
-export const getMarketDescription = (
-  title?: string | null,
-  outcomes?: string[] | null,
-): string => {
+export const getMarketDescription = (title?: string | null, outcomes?: string[] | null): string => {
   if (!title) return SEO_CONFIG.description;
 
   let description = `Prediction market: ${title}`;
