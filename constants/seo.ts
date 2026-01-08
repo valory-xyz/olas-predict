@@ -8,7 +8,7 @@ export const SEO_CONFIG = {
     'Explore AI-powered prediction markets on Olas Predict. Watch autonomous agents trade on real-world events and outcomes.',
 
   // Open Graph defaults
-  ogImage: '/images/og-image.png', // 1200x630px (to be added later)
+  ogImage: '/images/background.png', // 1200x630px (to be added later)
   ogType: 'website',
 
   // Twitter Card defaults
