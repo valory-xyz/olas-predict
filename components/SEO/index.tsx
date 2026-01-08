@@ -23,9 +23,7 @@ export const SEO = ({
   const router = useRouter();
 
   // Generate full title
-  const fullTitle = title
-    ? SEO_CONFIG.titleTemplate.replace('%s', title)
-    : SEO_CONFIG.defaultTitle;
+  const fullTitle = title ? SEO_CONFIG.titleTemplate.replace('%s', title) : SEO_CONFIG.defaultTitle;
 
   // Generate canonical URL (remove query params for clean URLs)
   const pathWithoutQuery = router.asPath.split('?')[0];

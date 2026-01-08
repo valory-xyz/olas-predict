@@ -44,7 +44,10 @@ const AgentsPage = () => {
   const { isMobile } = useScreen();
   return (
     <>
-      <SEO title={SEO_CONFIG.pages.agents.title} description={SEO_CONFIG.pages.agents.description} />
+      <SEO
+        title={SEO_CONFIG.pages.agents.title}
+        description={SEO_CONFIG.pages.agents.description}
+      />
       <Flex vertical gap={isMobile ? 16 : 40} align="center" className="flex-auto">
         <TraderAgents />
         <RunYourAgentHint />
