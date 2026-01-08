@@ -60,8 +60,8 @@ Dynamic routes:
 **GraphQL Subgraphs** (`graphql/queries.ts`):
 The app queries multiple subgraphs on Gnosis Chain:
 - **OMEN_SUBGRAPH_URL**: Main prediction market data (markets, trades, conditions)
-- **OLAS_AGENTS_SUBGRAPH_URL**: Agent service information
-- **OLAS_MECH_SUBGRAPH_URL**: Mech agent predictions
+- **OLAS_AGENTS_SUBGRAPH_URL**: Agents and their predictions information
+- **OLAS_MECH_SUBGRAPH_URL**: Mech agents and requests
 - **CONDITIONAL_TOKENS_SUBGRAPH_URL**: Token position data
 - **GNOSIS_STAKING_SUBGRAPH_URL**: Staking statistics
 - **OMEN_THUMBNAIL_MAPPING_SUBGRAPH_URL**: Question thumbnail images
