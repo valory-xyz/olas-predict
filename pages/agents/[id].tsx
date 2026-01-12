@@ -1,7 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Flex } from 'antd';
 import { getTraderAgent } from 'graphql/queries';
-import type { GetServerSideProps } from 'next';
 import { useRouter } from 'next/router';
 
 import { AgentActivity } from 'components/Activity/AgentActivity';
@@ -71,8 +70,3 @@ const AgentPage = () => {
 };
 
 export default AgentPage;
-
-// Force SSR so OG/Twitter tags render in initial HTML for crawlers
-export const getServerSideProps: GetServerSideProps = async () => ({
-  props: {},
-});

@@ -1,7 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Flex, Segmented } from 'antd';
 import { getMarkets } from 'graphql/queries';
-import type { GetServerSideProps } from 'next';
 import { useRouter } from 'next/router';
 import styled from 'styled-components';
 
@@ -12,7 +11,7 @@ import { QuestionCard } from 'components/QuestionCard';
 import { LoaderCard } from 'components/QuestionCard/LoaderCard';
 import { SEO } from 'components/SEO';
 import { DEFAULT_STATE_FILTER, STATE_FILTER_VALUES } from 'constants/filters';
-import { PAGE_QUERY_PARAM, STATE_QUERY_PARAM } from 'constants/index';
+import { STATE_QUERY_PARAM } from 'constants/index';
 import { getQuestionsSeoContent } from 'constants/seo';
 import { MEDIA_QUERY } from 'constants/theme';
 import { useScreen } from 'hooks/useScreen';
@@ -109,20 +108,3 @@ const QuestionsPage = ({ stateParam, page }: QuestionsPageProps) => {
 };
 
 export default QuestionsPage;
-
-// Force SSR so crawlers receive head tags without relying on client JS
-export const getServerSideProps: GetServerSideProps<QuestionsPageProps> = async (context) => {
-  const stateParamRaw = context.query[STATE_QUERY_PARAM];
-  const pageParamRaw = context.query[PAGE_QUERY_PARAM];
-
-  const stateParam = typeof stateParamRaw === 'string' ? stateParamRaw : DEFAULT_STATE_FILTER;
-  const pageValue = typeof pageParamRaw === 'string' ? Number(pageParamRaw) : 1;
-  const page = Number.isFinite(pageValue) && pageValue > 0 ? pageValue : 1;
-
-  return {
-    props: {
-      stateParam,
-      page,
-    },
-  };
-};

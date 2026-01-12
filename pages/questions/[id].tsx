@@ -20,7 +20,12 @@ const isMarketBroken = (market: FixedProductMarketMaker) =>
 const isMarketInvalid = (market: FixedProductMarketMaker) =>
   market.currentAnswer === INVALID_ANSWER_HEX;
 
-const QuestionPage = () => {
+type QuestionPageProps = {
+  initialMarket?: FixedProductMarketMaker | null;
+  initialError?: boolean;
+};
+
+const QuestionPage = ({ initialMarket }: QuestionPageProps) => {
   const router = useRouter();
   const id = router.query.id;
 
@@ -28,13 +33,14 @@ const QuestionPage = () => {
     enabled: !!id,
     queryKey: ['getMarket', id],
     queryFn: async () => getMarket({ id: `${id}`.toLowerCase() }),
-    select: (data) => data.fixedProductMarketMaker,
+    initialData: initialMarket ? { fixedProductMarketMaker: initialMarket } : undefined,
   });
 
-  const seoTitle = data?.title || 'Prediction Market';
-  const seoDescription = data ? getMarketDescription(data.title, data.outcomes) : undefined;
+  const market = data?.fixedProductMarketMaker;
+  const seoTitle = market?.title || 'Prediction Market';
+  const seoDescription = market ? getMarketDescription(market.title, market.outcomes) : undefined;
 
-  if (isLoading)
+  if (isLoading && !initialMarket)
     return (
       <>
         <SEO title="Loading..." />
@@ -44,7 +50,7 @@ const QuestionPage = () => {
       </>
     );
 
-  if (isError)
+  if (isError && !initialMarket)
     return (
       <>
         <SEO title="Error" noIndex />
@@ -53,14 +59,14 @@ const QuestionPage = () => {
     );
 
   if (isFetched) {
-    if (!data)
+    if (!market)
       return (
         <>
           <SEO title="Market Not Found" noIndex />
           <QuestionNotFoundError />
         </>
       );
-    if (isMarketInvalid(data) || isMarketBroken(data))
+    if (isMarketInvalid(market) || isMarketBroken(market))
       return (
         <>
           <SEO title="Market Not Found" noIndex />
@@ -72,9 +78,9 @@ const QuestionPage = () => {
       <>
         <SEO title={seoTitle} description={seoDescription} />
         <Flex vertical gap={40} align="center" className="flex-auto">
-          <QuestionDetailsCard market={data} />
-          <Probability marketId={data.id} outcomes={data.outcomes} />
-          <MarketActivity marketId={data.id} />
+          <QuestionDetailsCard market={market} />
+          <Probability marketId={market.id} outcomes={market.outcomes} />
+          <MarketActivity marketId={market.id} />
         </Flex>
       </>
     );
@@ -84,7 +90,19 @@ const QuestionPage = () => {
 
 export default QuestionPage;
 
-// Force SSR so OG/Twitter tags render in the initial HTML for crawlers
-export const getServerSideProps: GetServerSideProps = async () => ({
-  props: {},
-});
+export const getServerSideProps: GetServerSideProps<QuestionPageProps> = async (context) => {
+  const { id } = context.params || {};
+  if (!id || typeof id !== 'string') {
+    return { props: { initialMarket: null, initialError: true } };
+  }
+  try {
+    const data = await getMarket({ id: id.toLowerCase() });
+    const market = data?.fixedProductMarketMaker;
+    if (!market) {
+      return { props: { initialMarket: null } };
+    }
+    return { props: { initialMarket: market } };
+  } catch {
+    return { props: { initialMarket: null, initialError: true } };
+  }
+};

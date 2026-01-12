@@ -1,6 +1,5 @@
 import { Card, Flex, Typography } from 'antd';
 import { ArrowRight } from 'lucide-react';
-import type { GetServerSideProps } from 'next';
 import styled from 'styled-components';
 
 import { CreatorAgents } from 'components/CreatorAgents';
@@ -60,8 +59,3 @@ const AgentsPage = () => {
 };
 
 export default AgentsPage;
-
-// Force SSR so default meta tags are present in the HTML crawlers fetch
-export const getServerSideProps: GetServerSideProps = async () => ({
-  props: {},
-});
