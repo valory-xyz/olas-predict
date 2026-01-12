@@ -2,7 +2,6 @@ import { useQuery } from '@tanstack/react-query';
 import { Flex, Segmented } from 'antd';
 import { getMarkets } from 'graphql/queries';
 import type { GetServerSideProps } from 'next';
-import { useSearchParams } from 'next/navigation';
 import { useRouter } from 'next/router';
 import styled from 'styled-components';
 
@@ -29,13 +28,14 @@ const Filters = styled(Segmented)`
 
 const ITEMS_PER_PAGE = 5;
 
-const QuestionsPage = () => {
+type QuestionsPageProps = {
+  stateParam: string;
+  page: number;
+};
+
+const QuestionsPage = ({ stateParam, page }: QuestionsPageProps) => {
   const { isMobile } = useScreen();
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const stateParam = searchParams.get(STATE_QUERY_PARAM) || DEFAULT_STATE_FILTER;
-  const pageParam = searchParams.get(PAGE_QUERY_PARAM);
-  const page = pageParam ? +pageParam : 1;
 
   const seoContent = getQuestionsSeoContent(stateParam);
 
@@ -110,7 +110,19 @@ const QuestionsPage = () => {
 
 export default QuestionsPage;
 
-// Force SSR/SSG rendering so crawlers receive head tags without relying on client JS
-export const getServerSideProps: GetServerSideProps = async () => ({
-  props: {},
-});
+// Force SSR so crawlers receive head tags without relying on client JS
+export const getServerSideProps: GetServerSideProps<QuestionsPageProps> = async (context) => {
+  const stateParamRaw = context.query[STATE_QUERY_PARAM];
+  const pageParamRaw = context.query[PAGE_QUERY_PARAM];
+
+  const stateParam = typeof stateParamRaw === 'string' ? stateParamRaw : DEFAULT_STATE_FILTER;
+  const pageValue = typeof pageParamRaw === 'string' ? Number(pageParamRaw) : 1;
+  const page = Number.isFinite(pageValue) && pageValue > 0 ? pageValue : 1;
+
+  return {
+    props: {
+      stateParam,
+      page,
+    },
+  };
+};
