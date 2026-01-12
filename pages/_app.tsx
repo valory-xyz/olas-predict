@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
-import App, { type AppContext, type AppProps } from 'next/app';
+import { type AppProps } from 'next/app';
 import { WagmiProvider } from 'wagmi';
 
 import ErrorBoundary from 'components/ErrorBoundary';
@@ -33,9 +33,3 @@ const PredictApp = ({ Component, pageProps }: AppProps) => (
 );
 
 export default PredictApp;
-
-// Force SSR globally so pages render head/meta tags server-side
-PredictApp.getInitialProps = async (appContext: AppContext) => {
-  const appProps = await App.getInitialProps(appContext);
-  return { ...appProps };
-};
