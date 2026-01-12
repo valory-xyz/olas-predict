@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Flex, Segmented } from 'antd';
 import { getMarkets } from 'graphql/queries';
+import type { GetServerSideProps } from 'next';
 import { useSearchParams } from 'next/navigation';
 import { useRouter } from 'next/router';
 import styled from 'styled-components';
@@ -108,3 +109,8 @@ const QuestionsPage = () => {
 };
 
 export default QuestionsPage;
+
+// Force SSR/SSG rendering so crawlers receive head tags without relying on client JS
+export const getServerSideProps: GetServerSideProps = async () => ({
+  props: {},
+});

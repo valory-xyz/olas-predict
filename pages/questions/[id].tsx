@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Flex } from 'antd';
 import { getMarket } from 'graphql/queries';
 import { FixedProductMarketMaker } from 'graphql/types';
+import type { GetServerSideProps } from 'next';
 import { useRouter } from 'next/router';
 
 import { MarketActivity } from 'components/Activity/MarketActivity';
@@ -82,3 +83,8 @@ const QuestionPage = () => {
 };
 
 export default QuestionPage;
+
+// Force SSR so OG/Twitter tags render in the initial HTML for crawlers
+export const getServerSideProps: GetServerSideProps = async () => ({
+  props: {},
+});
