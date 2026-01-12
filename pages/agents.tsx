@@ -4,7 +4,9 @@ import styled from 'styled-components';
 
 import { CreatorAgents } from 'components/CreatorAgents';
 import { MechAgents } from 'components/MechAgents';
+import { SEO } from 'components/SEO';
 import { TraderAgents } from 'components/TraderAgents';
+import { SEO_CONFIG } from 'constants/seo';
 import { COLOR } from 'constants/theme';
 import { useScreen } from 'hooks/useScreen';
 
@@ -41,12 +43,18 @@ const RunYourAgentHint = () => (
 const AgentsPage = () => {
   const { isMobile } = useScreen();
   return (
-    <Flex vertical gap={isMobile ? 16 : 40} align="center" className="flex-auto">
-      <TraderAgents />
-      <RunYourAgentHint />
-      <CreatorAgents />
-      <MechAgents />
-    </Flex>
+    <>
+      <SEO
+        title={SEO_CONFIG.pages.agents.title}
+        description={SEO_CONFIG.pages.agents.description}
+      />
+      <Flex vertical gap={isMobile ? 16 : 40} align="center" className="flex-auto">
+        <TraderAgents />
+        <RunYourAgentHint />
+        <CreatorAgents />
+        <MechAgents />
+      </Flex>
+    </>
   );
 };
 
