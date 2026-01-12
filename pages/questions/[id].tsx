@@ -2,7 +2,6 @@ import { useQuery } from '@tanstack/react-query';
 import { Flex } from 'antd';
 import { getMarket } from 'graphql/queries';
 import { FixedProductMarketMaker } from 'graphql/types';
-import type { GetServerSideProps } from 'next';
 import { useRouter } from 'next/router';
 
 import { MarketActivity } from 'components/Activity/MarketActivity';
@@ -20,12 +19,7 @@ const isMarketBroken = (market: FixedProductMarketMaker) =>
 const isMarketInvalid = (market: FixedProductMarketMaker) =>
   market.currentAnswer === INVALID_ANSWER_HEX;
 
-type QuestionPageProps = {
-  initialMarket?: FixedProductMarketMaker | null;
-  initialError?: boolean;
-};
-
-const QuestionPage = ({ initialMarket }: QuestionPageProps) => {
+const QuestionPage = () => {
   const router = useRouter();
   const id = router.query.id;
 
@@ -33,14 +27,13 @@ const QuestionPage = ({ initialMarket }: QuestionPageProps) => {
     enabled: !!id,
     queryKey: ['getMarket', id],
     queryFn: async () => getMarket({ id: `${id}`.toLowerCase() }),
-    initialData: initialMarket ? { fixedProductMarketMaker: initialMarket } : undefined,
+    select: (data) => data.fixedProductMarketMaker,
   });
 
-  const market = data?.fixedProductMarketMaker;
-  const seoTitle = market?.title || 'Prediction Market';
-  const seoDescription = market ? getMarketDescription(market.title, market.outcomes) : undefined;
+  const seoTitle = data?.title || 'Prediction Market';
+  const seoDescription = data ? getMarketDescription(data.title, data.outcomes) : undefined;
 
-  if (isLoading && !initialMarket)
+  if (isLoading)
     return (
       <>
         <SEO title="Loading..." />
@@ -50,7 +43,7 @@ const QuestionPage = ({ initialMarket }: QuestionPageProps) => {
       </>
     );
 
-  if (isError && !initialMarket)
+  if (isError)
     return (
       <>
         <SEO title="Error" noIndex />
@@ -59,14 +52,14 @@ const QuestionPage = ({ initialMarket }: QuestionPageProps) => {
     );
 
   if (isFetched) {
-    if (!market)
+    if (!data)
       return (
         <>
           <SEO title="Market Not Found" noIndex />
           <QuestionNotFoundError />
         </>
       );
-    if (isMarketInvalid(market) || isMarketBroken(market))
+    if (isMarketInvalid(data) || isMarketBroken(data))
       return (
         <>
           <SEO title="Market Not Found" noIndex />
@@ -78,9 +71,9 @@ const QuestionPage = ({ initialMarket }: QuestionPageProps) => {
       <>
         <SEO title={seoTitle} description={seoDescription} />
         <Flex vertical gap={40} align="center" className="flex-auto">
-          <QuestionDetailsCard market={market} />
-          <Probability marketId={market.id} outcomes={market.outcomes} />
-          <MarketActivity marketId={market.id} />
+          <QuestionDetailsCard market={data} />
+          <Probability marketId={data.id} outcomes={data.outcomes} />
+          <MarketActivity marketId={data.id} />
         </Flex>
       </>
     );
@@ -89,20 +82,3 @@ const QuestionPage = ({ initialMarket }: QuestionPageProps) => {
 };
 
 export default QuestionPage;
-
-export const getServerSideProps: GetServerSideProps<QuestionPageProps> = async (context) => {
-  const { id } = context.params || {};
-  if (!id || typeof id !== 'string') {
-    return { props: { initialMarket: null, initialError: true } };
-  }
-  try {
-    const data = await getMarket({ id: id.toLowerCase() });
-    const market = data?.fixedProductMarketMaker;
-    if (!market) {
-      return { props: { initialMarket: null } };
-    }
-    return { props: { initialMarket: market } };
-  } catch {
-    return { props: { initialMarket: null, initialError: true } };
-  }
-};

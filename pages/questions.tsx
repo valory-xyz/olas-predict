@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Flex, Segmented } from 'antd';
 import { getMarkets } from 'graphql/queries';
+import { useSearchParams } from 'next/navigation';
 import { useRouter } from 'next/router';
 import styled from 'styled-components';
 
@@ -11,7 +12,7 @@ import { QuestionCard } from 'components/QuestionCard';
 import { LoaderCard } from 'components/QuestionCard/LoaderCard';
 import { SEO } from 'components/SEO';
 import { DEFAULT_STATE_FILTER, STATE_FILTER_VALUES } from 'constants/filters';
-import { STATE_QUERY_PARAM } from 'constants/index';
+import { PAGE_QUERY_PARAM, STATE_QUERY_PARAM } from 'constants/index';
 import { getQuestionsSeoContent } from 'constants/seo';
 import { MEDIA_QUERY } from 'constants/theme';
 import { useScreen } from 'hooks/useScreen';
@@ -27,14 +28,13 @@ const Filters = styled(Segmented)`
 
 const ITEMS_PER_PAGE = 5;
 
-type QuestionsPageProps = {
-  stateParam: string;
-  page: number;
-};
-
-const QuestionsPage = ({ stateParam, page }: QuestionsPageProps) => {
+const QuestionsPage = () => {
   const { isMobile } = useScreen();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const stateParam = searchParams.get(STATE_QUERY_PARAM) || DEFAULT_STATE_FILTER;
+  const pageParam = searchParams.get(PAGE_QUERY_PARAM);
+  const page = pageParam ? +pageParam : 1;
 
   const seoContent = getQuestionsSeoContent(stateParam);
 
