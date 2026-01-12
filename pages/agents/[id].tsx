@@ -10,10 +10,11 @@ import { AgentStatistics } from 'components/AgentStatistics';
 import { AgentNotFoundError, LoadingError } from 'components/ErrorState';
 import { SEO } from 'components/SEO';
 import { getAgentDescription } from 'constants/seo';
+import { generateName } from 'utils/agents';
 
 const AgentPage = () => {
   const router = useRouter();
-  const id = router.query.id;
+  const id = Array.isArray(router.query.id) ? router.query.id[0] : router.query.id;
   const { data, isLoading, isFetched, isError } = useQuery({
     enabled: !!id,
     queryKey: ['getAgent', id],
@@ -21,10 +22,7 @@ const AgentPage = () => {
     select: (data) => data.traderAgent,
   });
 
-  const seoTitle = id ? `Agent ${String(id).substring(0, 10)}...` : 'AI Agent';
-  const seoDescription = data ? getAgentDescription(data.id) : undefined;
-
-  if (isLoading)
+  if (isLoading) {
     return (
       <>
         <SEO title="Loading Agent..." />
@@ -33,23 +31,29 @@ const AgentPage = () => {
         </Flex>
       </>
     );
+  }
 
-  if (isError)
+  if (isError) {
     return (
       <>
         <SEO title="Error" noIndex />
         <LoadingError />
       </>
     );
+  }
 
   if (isFetched) {
-    if (!data)
+    if (!data) {
       return (
         <>
           <SEO title="Agent Not Found" noIndex />
           <AgentNotFoundError />
         </>
       );
+    }
+
+    const seoTitle = id ? `Agent ${generateName(id)}...` : 'AI Agent';
+    const seoDescription = data ? getAgentDescription(data.id) : undefined;
 
     return (
       <>
