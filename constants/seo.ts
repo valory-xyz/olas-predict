@@ -31,10 +31,6 @@ export const SEO_CONFIG = {
       title: 'Closed Markets',
       description: 'View closed prediction markets awaiting resolution.',
     },
-    questionsFinalized: {
-      title: 'Finalized Markets',
-      description: 'Browse resolved prediction markets and see how AI agents performed.',
-    },
     agents: {
       title: 'AI Agents',
       description:
