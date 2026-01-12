@@ -65,3 +65,23 @@ export const getAgentDescription = (agentId: string): string => {
 
   return truncateForMeta(description);
 };
+
+export const getQuestionsSeoContent = (state: string) => {
+  switch (state) {
+    case 'opened':
+      return {
+        title: SEO_CONFIG.pages.questionsOpened.title,
+        description: SEO_CONFIG.pages.questionsOpened.description,
+      };
+    case 'closed':
+      return {
+        title: SEO_CONFIG.pages.questionsClosed.title,
+        description: SEO_CONFIG.pages.questionsClosed.description,
+      };
+    default:
+      return {
+        title: SEO_CONFIG.pages.questions.title,
+        description: SEO_CONFIG.pages.questions.description,
+      };
+  }
+};
