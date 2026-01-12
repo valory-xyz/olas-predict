@@ -22,14 +22,13 @@ export const SEO = ({
 }: SEOProps) => {
   const router = useRouter();
 
-  // Generate full title
   const fullTitle = title ? SEO_CONFIG.titleTemplate.replace('%s', title) : SEO_CONFIG.defaultTitle;
 
-  // Generate canonical URL (remove query params for clean URLs)
+  // Canonical URL (remove query params for clean URLs)
   const pathWithoutQuery = router.asPath.split('?')[0];
   const canonicalUrl = canonical || `${SEO_CONFIG.baseUrl}${pathWithoutQuery}`;
 
-  // Generate full OG image URL
+  // Full OG image URL
   const fullOgImage = ogImage.startsWith('http') ? ogImage : `${SEO_CONFIG.baseUrl}${ogImage}`;
 
   return (

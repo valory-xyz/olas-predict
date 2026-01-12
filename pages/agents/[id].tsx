@@ -52,7 +52,7 @@ const AgentPage = () => {
       );
     }
 
-    const seoTitle = id ? `Agent ${generateName(id)}...` : 'AI Agent';
+    const seoTitle = id ? `Agent ${generateName(id)}` : 'AI Agent';
     const seoDescription = data ? getAgentDescription(data.id) : undefined;
 
     return (

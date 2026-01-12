@@ -62,7 +62,6 @@ export const getMarketDescription = (title?: string | null, outcomes?: string[] 
 export const getAgentDescription = (agentId: string): string => {
   const shortId = agentId.length > 10 ? `${agentId.substring(0, 10)}...` : agentId;
   const description = `View trading activity and performance statistics for AI agent ${shortId} on Olas Predict prediction markets.`;
-
   return truncateForMeta(description);
 };
 
