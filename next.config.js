@@ -1,7 +1,9 @@
 /**
  * @type {import('next').NextConfig}
  */
-module.exports = {
+import { withPlausibleProxy } from 'next-plausible';
+
+export default withPlausibleProxy()({
   reactStrictMode: true,
   compiler: {
     styledComponents: true,
@@ -57,4 +59,4 @@ module.exports = {
       },
     ],
   },
-};
+});
