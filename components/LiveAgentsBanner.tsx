@@ -34,10 +34,7 @@ export const LiveAgentsBanner = () => {
   const { data: liveAgents, isLoading: isLiveAgentsLoading } = useQuery({
     queryKey: ['getLiveAgents'],
     staleTime: Infinity,
-    queryFn: async () => {
-      const result = await fetchPredictDaa7dAvg();
-      return result.status === 'success' ? result.value : null;
-    },
+    queryFn: fetchPredictDaa7dAvg,
   });
 
   return (
