@@ -53,10 +53,8 @@ export const ARTICLE_SOURCE_BY_CREATOR: Record<string, string> = {
     'https://market-approval-pearl.autonolas.tech/market',
 };
 
-export const DUNE_QUERY_URL = 'https://dune.com/queries';
-export const PREDICTION_DAA_QUERY_ID = '4165113';
-export const PREDICTION_ECONOMY_DASHBOARD_URL =
-  'https://dune.com/adrian0x/the-olas-predict-agent-economy';
+export const OLAS_GNOSIS_REGISTRY_QUERY_URL =
+  'https://thegraph.com/explorer/subgraphs/GmDw6a6EfP6z58dzkw5WehpxjaiEKB6aZRk4TNUm3DPn?view=Query&chain=arbitrum-one';
 
 export const COINGECKO_OLAS_IN_USD_PRICE_URL =
   'https://api.coingecko.com/api/v3/simple/token_price/xdai?contract_addresses=0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f&vs_currencies=usd';
