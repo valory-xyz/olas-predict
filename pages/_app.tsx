@@ -30,11 +30,10 @@ type WindowWithPlausible = Window & {
  * - /agents/{id} -> /agents/[id]
  * - Other routes remain unchanged
  */
-const normalizePath = (pathname: string): string => {
-  let normalized = pathname.replace(/^\/questions\/[^/]+/, '/questions/[id]');
-  normalized = normalized.replace(/^\/agents\/[^/]+/, '/agents/[id]');
-  return normalized;
-};
+const normalizePath = (pathname: string): string =>
+  pathname
+    .replace(/^\/questions\/[^/]+/, '/questions/[id]')
+    .replace(/^\/agents\/[^/]+/, '/agents/[id]');
 
 /**
  * Component that tracks pageviews with normalized paths
@@ -48,11 +47,9 @@ const PageViewTracker = () => {
 
       const normalizedPath = normalizePath(pathname);
 
-      if (typeof window !== 'undefined') {
-        const windowWithPlausible = window as WindowWithPlausible;
-        if (windowWithPlausible.plausible) {
-          windowWithPlausible.plausible('pageview', { url: normalizedPath });
-        }
+      const windowWithPlausible = window as WindowWithPlausible;
+      if (windowWithPlausible.plausible) {
+        windowWithPlausible.plausible('pageview', { url: normalizedPath });
       }
     };
 
