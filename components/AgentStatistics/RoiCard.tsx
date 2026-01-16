@@ -6,6 +6,7 @@ import { TraderAgent } from 'graphql/types';
 import { useMemo } from 'react';
 
 import { NA } from 'constants/index';
+import { getMidnightUtcTimestampDaysAgo } from 'utils/time';
 
 import { useOlasInUsdPrice } from '../../hooks/useOlasInUsdPrice';
 import { StatisticCard } from './StatisticCard';
@@ -18,14 +19,6 @@ const PREDICT_MARKET_DURATION_DAYS = 4;
 
 type RoiCardProps = {
   agent: TraderAgent;
-};
-
-/* returns the timestamp for 00:00 UTC N days ago */
-const getMidnightUtcTimestampDaysAgo = (daysAgo: number) => {
-  const now = new Date();
-  const utcMidnightToday = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  const timestamp = Math.floor((utcMidnightToday - daysAgo * 24 * 60 * 60 * 1000) / 1000);
-  return timestamp;
 };
 
 export const RoiCard = ({ agent }: RoiCardProps) => {
