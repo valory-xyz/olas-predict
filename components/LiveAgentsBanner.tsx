@@ -3,9 +3,9 @@ import { Flex, Skeleton, Typography } from 'antd';
 import { ArrowUpRight } from 'lucide-react';
 import styled from 'styled-components';
 
-import { NA, PREDICTION_ECONOMY_DASHBOARD_URL } from 'constants/index';
+import { NA, OLAS_GNOSIS_REGISTRY_QUERY_URL } from 'constants/index';
 import { COLOR, MEDIA_QUERY } from 'constants/theme';
-import { getPredictionDaa } from 'utils/flipside';
+import { fetchPredictDaa7dAvg } from 'utils/registry';
 
 const Root = styled(Flex)`
   width: 100%;
@@ -34,7 +34,7 @@ export const LiveAgentsBanner = () => {
   const { data: liveAgents, isLoading: isLiveAgentsLoading } = useQuery({
     queryKey: ['getLiveAgents'],
     staleTime: Infinity,
-    queryFn: getPredictionDaa,
+    queryFn: fetchPredictDaa7dAvg,
   });
 
   return (
@@ -43,7 +43,7 @@ export const LiveAgentsBanner = () => {
       {isLiveAgentsLoading ? (
         <Skeleton.Input size="small" />
       ) : (
-        <a target="_blank" href={PREDICTION_ECONOMY_DASHBOARD_URL}>
+        <a target="_blank" href={OLAS_GNOSIS_REGISTRY_QUERY_URL}>
           {liveAgents || NA} live agents <ArrowUpRight size={16} />
         </a>
       )}
