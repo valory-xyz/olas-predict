@@ -1,6 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
+import PlausibleProvider from 'next-plausible';
 import { type AppProps } from 'next/app';
+import { useRouter } from 'next/router';
+import { useEffect } from 'react';
 import { WagmiProvider } from 'wagmi';
 
 import ErrorBoundary from 'components/ErrorBoundary';
@@ -12,10 +15,65 @@ import { wagmiConfig } from 'constants/wagmiConfig';
 
 const queryClient = new QueryClient();
 
+type PlausibleFunction = (
+  event: string,
+  options?: { url?: string; props?: Record<string, unknown> },
+) => void;
+
+type WindowWithPlausible = Window & {
+  plausible?: PlausibleFunction;
+};
+
+/**
+ * Normalizes dynamic routes for Plausible tracking
+ * - /questions/{id} -> /questions/[id]
+ * - /agents/{id} -> /agents/[id]
+ * - Other routes remain unchanged
+ */
+const normalizePath = (pathname: string): string =>
+  pathname
+    .replace(/^\/questions\/[^/]+/, '/questions/[id]')
+    .replace(/^\/agents\/[^/]+/, '/agents/[id]');
+
+/**
+ * Component that tracks pageviews with normalized paths
+ */
+const PageViewTracker = () => {
+  const router = useRouter();
+
+  useEffect(() => {
+    const handleRouteChange = (url: string) => {
+      const pathname = url.startsWith('http') ? new URL(url).pathname : url.split('?')[0];
+
+      const normalizedPath = normalizePath(pathname);
+
+      const windowWithPlausible = window as WindowWithPlausible;
+      if (windowWithPlausible.plausible) {
+        windowWithPlausible.plausible('pageview', { url: normalizedPath });
+      }
+    };
+
+    // Track initial pageview when router is ready
+    if (router.isReady) {
+      handleRouteChange(router.asPath);
+    }
+
+    // Track route changes
+    router.events.on('routeChangeComplete', handleRouteChange);
+
+    return () => {
+      router.events.off('routeChangeComplete', handleRouteChange);
+    };
+  }, [router]);
+
+  return null;
+};
+
 const PredictApp = ({ Component, pageProps }: AppProps) => (
-  <>
+  <PlausibleProvider domain="predict.olas.network" manualPageviews>
     <GlobalStyle />
     <SEO />
+    <PageViewTracker />
 
     <AutonolasThemeProvider>
       <WagmiProvider config={wagmiConfig}>
@@ -29,7 +87,7 @@ const PredictApp = ({ Component, pageProps }: AppProps) => (
         </QueryClientProvider>
       </WagmiProvider>
     </AutonolasThemeProvider>
-  </>
+  </PlausibleProvider>
 );
 
 export default PredictApp;
