@@ -23,6 +23,15 @@ export const CREATORS: Record<string, { name: string; image: string }> = {
 
 export const CREATOR_ADDRESSES = Object.keys(CREATORS);
 
+export const AGENTS = {
+  POLYSTRAT: 'polystrat',
+  OMENSTRAT: 'omenstrat',
+} as const;
+
+export const ACHIEVEMENT_TYPES = {
+  PAYOUT: 'payout',
+} as const;
+
 export const BROKEN_MARKETS = [
   '0xe7ed8a5f2f0f17f7d584ae8ddd0592d1ac67791f',
   '0xbfa584b29891941c8950ce975c1f7fa595ce1b99',

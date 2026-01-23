@@ -69,25 +69,33 @@ const PageViewTracker = () => {
   return null;
 };
 
-const PredictApp = ({ Component, pageProps }: AppProps) => (
-  <PlausibleProvider domain="predict.olas.network" manualPageviews>
-    <GlobalStyle />
-    <SEO />
-    <PageViewTracker />
+const PredictApp = ({ Component, pageProps }: AppProps) => {
+  const router = useRouter();
 
-    <AutonolasThemeProvider>
-      <WagmiProvider config={wagmiConfig}>
-        <QueryClientProvider client={queryClient}>
-          <Layout>
-            <ErrorBoundary>
-              <Component {...pageProps} />
-            </ErrorBoundary>
-          </Layout>
-          <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-left" />
-        </QueryClientProvider>
-      </WagmiProvider>
-    </AutonolasThemeProvider>
-  </PlausibleProvider>
-);
+  const isAchievementPage = router.pathname.includes('/achievement');
+
+  const content = (
+    <ErrorBoundary>
+      <Component {...pageProps} />
+    </ErrorBoundary>
+  );
+
+  return (
+    <PlausibleProvider domain="predict.olas.network" manualPageviews>
+      <GlobalStyle />
+      <SEO />
+      <PageViewTracker />
+
+      <AutonolasThemeProvider>
+        <WagmiProvider config={wagmiConfig}>
+          <QueryClientProvider client={queryClient}>
+            {isAchievementPage ? content : <Layout>{content}</Layout>}
+            <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-left" />
+          </QueryClientProvider>
+        </WagmiProvider>
+      </AutonolasThemeProvider>
+    </PlausibleProvider>
+  );
+};
 
 export default PredictApp;
