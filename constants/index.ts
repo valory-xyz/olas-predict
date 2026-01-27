@@ -77,3 +77,5 @@ export const COINGECKO_OLAS_IN_USD_PRICE_URL =
 export const OLAS_ADDRESS = '0xce11e14225575945b8e6dc0d4f2dd4c570f79d9f';
 
 export const PEARL_WEBSITE_URL = 'https://pearl.you';
+
+export const ACHIEVEMENTS_LOOKUP_PREFIX = 'achievements-lookup';
