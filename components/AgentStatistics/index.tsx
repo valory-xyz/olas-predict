@@ -21,7 +21,7 @@ export const AgentStatistics = ({ agent }: AgentStatisticsProps) => {
         Agent statistics
       </Title>
       <Row>
-        <StatisticCard title="Bets made" value={agent.totalBets.toLocaleString()} />
+        <StatisticCard title="Trades made" value={agent.totalBets.toLocaleString()} />
         <SuccessRateCard agent={agent} />
       </Row>
       <Row>

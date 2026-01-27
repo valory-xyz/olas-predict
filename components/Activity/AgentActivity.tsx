@@ -76,7 +76,7 @@ export const AgentActivity = ({ agentId }: AgentActivityProps) => {
           children: (
             <Flex vertical gap={8} key={item.id}>
               <Text>
-                <b>Trader agent</b> bet{' '}
+                <b>Trader agent</b> placed{' '}
                 <a
                   href={`${GNOSIS_SCAN_URL}/tx/${item.txHash}`}
                   target="_blank"

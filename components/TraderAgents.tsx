@@ -44,7 +44,7 @@ export const TraderAgents = () => {
           These agents watch for new questions being created on Omen by Creator agents. When they
           see one, they spring into action, and pay Mechs to go off and help them research the
           question, and come up with a probability and confidence score which they can use to make
-          bets in the prediction market.
+          trades in the prediction market.
         </Paragraph>
       </Flex>
       <Table
@@ -70,7 +70,7 @@ export const TraderAgents = () => {
             ),
           },
           {
-            title: 'Bets made',
+            title: 'Trades made',
             dataIndex: 'totalBets',
             key: 'bets',
             className: 'text-end',
