@@ -11,4 +11,6 @@ export const PolystratAchievementCard = () => {
   if (!router.isReady || !type) return null;
 
   if (type === ACHIEVEMENT_TYPES.PAYOUT) return <Payout />;
+
+  return null;
 };

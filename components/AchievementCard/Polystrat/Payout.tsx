@@ -2,36 +2,12 @@ import { Button as AntdButton, Card as AntdCard, Divider, Flex, Spin, Typography
 import { useRouter } from 'next/router';
 import styled from 'styled-components';
 
+import { ExternalLinkIcon } from 'components/shared/ExternalLinkIcon';
 import { PEARL_WEBSITE_URL, POLYGON_SCAN_URL } from 'constants/index';
+import { ACHIEVEMENT_COLORS } from 'constants/theme';
 import { usePolymarketBet } from 'hooks/usePolymarketBet';
 
 const { Title, Text, Link } = Typography;
-
-const ACHIEVEMENT_COLORS = {
-  background: '#3F2565',
-  backgroundDark: '#2B194A',
-  border: 'rgba(255, 255, 255, 0.1)',
-  textPrimary: '#FFFFFF',
-  textSecondary: 'rgba(255, 255, 255, 0.5)',
-  accent: '#1AFF7B',
-  accentLight: 'rgba(26, 255, 123, 0.1)',
-  softLight: 'rgba(255, 255, 255, 0.8)',
-};
-
-const ExternalLinkIcon = ({ size = 16 }: { size?: number }) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width={size}
-    height={size}
-    fill="none"
-    viewBox="0 0 16 16"
-  >
-    <path
-      fill="currentColor"
-      d="M1.334 12.667V3.333a2 2 0 0 1 2-2h4a.667.667 0 0 1 0 1.334h-4a.667.667 0 0 0-.667.666v9.334a.666.666 0 0 0 .667.666h9.333a.666.666 0 0 0 .667-.666v-4a.667.667 0 0 1 1.333 0v4a2 2 0 0 1-2 2H3.334a2 2 0 0 1-2-2M14.667 6a.667.667 0 1 1-1.333 0V3.61L8.472 8.47a.667.667 0 1 1-.943-.942l4.862-4.862H10a.667.667 0 1 1 0-1.334h4c.367 0 .666.299.666.667z"
-    />
-  </svg>
-);
 
 const AchievementContainer = styled.div`
   min-height: 100vh;
@@ -39,7 +15,7 @@ const AchievementContainer = styled.div`
   align-items: center;
   justify-content: center;
   padding: 40px;
-  background-color: ${ACHIEVEMENT_COLORS.backgroundDark};
+  background-color: ${ACHIEVEMENT_COLORS.BACKGROUND_DARK};
   background-image: url('/images/background.png');
   background-size: cover;
   background-position: center;
@@ -47,8 +23,8 @@ const AchievementContainer = styled.div`
 `;
 
 const AchievementCard = styled(AntdCard)`
-  background: ${ACHIEVEMENT_COLORS.background} !important;
-  border: 1px solid ${ACHIEVEMENT_COLORS.border} !important;
+  background: ${ACHIEVEMENT_COLORS.BACKGROUND} !important;
+  border: 1px solid ${ACHIEVEMENT_COLORS.BORDER} !important;
   border-radius: 20px !important;
   max-width: 624px;
   width: 100%;
@@ -56,8 +32,8 @@ const AchievementCard = styled(AntdCard)`
 `;
 
 const MarketCard = styled(AntdCard)`
-  background: ${ACHIEVEMENT_COLORS.backgroundDark};
-  border: 1px solid ${ACHIEVEMENT_COLORS.border};
+  background: ${ACHIEVEMENT_COLORS.BACKGROUND_DARK};
+  border: 1px solid ${ACHIEVEMENT_COLORS.BORDER};
   border-radius: 14px;
   margin-bottom: 24px;
 `;
@@ -72,19 +48,19 @@ const Button = styled(AntdButton)`
   background: rgba(255, 255, 255, 0.1);
   border: none;
   border-radius: 8px;
-  color: ${ACHIEVEMENT_COLORS.softLight};
+  color: ${ACHIEVEMENT_COLORS.SOFT_LIGHT};
   font-size: 16px;
   font-weight: 500;
 `;
 
 const StatItem = ({ label, value }: { label: string; value: string }) => (
   <Flex vertical gap={4} style={{ maxWidth: 155, flex: 1 }}>
-    <Text style={{ fontSize: 14, color: ACHIEVEMENT_COLORS.textSecondary }}>{label}</Text>
+    <Text style={{ fontSize: 14, color: ACHIEVEMENT_COLORS.TEXT_SECONDARY }}>{label}</Text>
     <Text
       style={{
         fontSize: 20,
         fontWeight: 600,
-        color: ACHIEVEMENT_COLORS.textPrimary,
+        color: ACHIEVEMENT_COLORS.TEXT_PRIMARY,
       }}
     >
       {value}
@@ -121,7 +97,7 @@ export const Payout = () => {
     return (
       <AchievementContainer>
         <AchievementCard style={{ padding: 24 }}>
-          <Text style={{ color: ACHIEVEMENT_COLORS.textPrimary }}>
+          <Text style={{ color: ACHIEVEMENT_COLORS.TEXT_PRIMARY }}>
             {error ? 'Failed to load achievement data' : 'No data available'}
           </Text>
         </AchievementCard>
@@ -140,7 +116,7 @@ export const Payout = () => {
                 margin: 0,
                 fontSize: 20,
                 fontWeight: 500,
-                color: ACHIEVEMENT_COLORS.textPrimary,
+                color: ACHIEVEMENT_COLORS.TEXT_PRIMARY,
               }}
             >
               Successful prediction
@@ -153,7 +129,7 @@ export const Payout = () => {
                 alignItems: 'center',
                 gap: 6,
                 fontSize: 14,
-                color: ACHIEVEMENT_COLORS.textSecondary,
+                color: ACHIEVEMENT_COLORS.TEXT_SECONDARY,
               }}
             >
               Made by Polystrat AI agent on Polymarket <ExternalLinkIcon size={14} />
@@ -162,8 +138,8 @@ export const Payout = () => {
 
           <div
             style={{
-              background: ACHIEVEMENT_COLORS.accentLight,
-              color: ACHIEVEMENT_COLORS.accent,
+              background: ACHIEVEMENT_COLORS.ACCENT_LIGHT,
+              color: ACHIEVEMENT_COLORS.ACCENT,
               fontSize: 32,
               fontWeight: 600,
               padding: '6px 12px',
@@ -182,7 +158,7 @@ export const Payout = () => {
               fontSize: 16,
               fontWeight: 450,
               lineHeight: 1.5,
-              color: ACHIEVEMENT_COLORS.textPrimary,
+              color: ACHIEVEMENT_COLORS.TEXT_PRIMARY,
             }}
           >
             {data.question}
@@ -191,8 +167,7 @@ export const Payout = () => {
           <Divider
             style={{
               margin: 0,
-              marginBottom: 0,
-              borderColor: ACHIEVEMENT_COLORS.border,
+              borderColor: ACHIEVEMENT_COLORS.BORDER,
             }}
           />
 

@@ -28,9 +28,13 @@ export const AGENTS = {
   OMENSTRAT: 'omenstrat',
 } as const;
 
+export type AgentType = (typeof AGENTS)[keyof typeof AGENTS];
+
 export const ACHIEVEMENT_TYPES = {
   PAYOUT: 'payout',
 } as const;
+
+export type AchievementType = (typeof ACHIEVEMENT_TYPES)[keyof typeof ACHIEVEMENT_TYPES];
 
 export const BROKEN_MARKETS = [
   '0xe7ed8a5f2f0f17f7d584ae8ddd0592d1ac67791f',

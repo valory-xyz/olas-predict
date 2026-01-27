@@ -2,6 +2,8 @@ import { useQuery } from '@tanstack/react-query';
 import { getPolymarketBet } from 'graphql/queries';
 import { useMemo } from 'react';
 
+import { TransformedPolymarketBet } from 'types/polymarket';
+
 const USDC_DECIMALS = 6;
 
 export const usePolymarketBet = (betId: string) => {
@@ -11,7 +13,7 @@ export const usePolymarketBet = (betId: string) => {
     enabled: !!betId,
   });
 
-  const transformedData = useMemo(() => {
+  const transformedData = useMemo((): TransformedPolymarketBet | null => {
     if (!data?.bet) return null;
 
     const { bet } = data;

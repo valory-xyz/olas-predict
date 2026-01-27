@@ -1,5 +1,7 @@
 import { useRouter } from 'next/router';
 
+import { AGENTS } from 'constants/index';
+
 import { PolystratAchievementCard } from './Polystrat';
 
 export const AchievementCard = () => {
@@ -8,7 +10,7 @@ export const AchievementCard = () => {
 
   if (!router.isReady || !agent) return null;
 
-  if (agent === 'polystrat') return <PolystratAchievementCard />;
+  if (agent === AGENTS.POLYSTRAT) return <PolystratAchievementCard />;
 
   return null;
 };
