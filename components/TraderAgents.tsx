@@ -74,7 +74,7 @@ export const TraderAgents = () => {
             dataIndex: 'totalBets',
             key: 'bets',
             className: 'text-end',
-            width: 105,
+            width: 120,
             render: (totalBets) => <Text type="secondary">{totalBets.toLocaleString()}</Text>,
           },
           // {
