@@ -43,6 +43,7 @@ export const INVALID_ANSWER_HEX =
 export const REALITY_QUESTION_URL =
   'https://reality.eth.limo/app/#!/network/100/question/0x79e32ae03fb27b07c89c0c568f80287c01ca2e57-';
 export const GNOSIS_SCAN_URL = 'https://gnosisscan.io';
+export const POLYGON_SCAN_URL = 'https://polygonscan.com';
 export const IPFS_GATEWAY_URL = 'https://gateway.autonolas.tech/ipfs/';
 
 const SUBGRAPH_API_KEY = process.env.NEXT_PUBLIC_SUBGRAPH_API_KEY;
@@ -55,6 +56,7 @@ export const OLAS_AGENTS_SUBGRAPH_URL = 'https://predict-agents.subgraph.autonol
 export const OLAS_MECH_SUBGRAPH_URL = 'https://subgraph.autonolas.tech/subgraphs/name/mech';
 export const GNOSIS_STAKING_SUBGRAPH_URL =
   'https://gateway.thegraph.com/api/5c035877a4af18d178c96afe55ed41ae/subgraphs/id/F3iqL2iw5UTrP1qbb4S694pGEkBwzoxXp1TRikB2K4e';
+export const POLYMARKET_SUBGRAPH_URL = process.env.NEXT_PUBLIC_PREDICT_POLYMARKET_URL || '';
 
 export const ARTICLE_SOURCE_BY_CREATOR: Record<string, string> = {
   '0x89c5cc945dd550bcffb72fe42bff002429f46fec': 'https://marketserver.autonolas.tech/market',

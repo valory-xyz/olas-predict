@@ -1,6 +1,8 @@
-import { Button, Card, Divider, Flex, Typography } from 'antd';
+import { Card as AntdCard, Button, Divider, Flex, Spin, Typography } from 'antd';
 import { useRouter } from 'next/router';
 import styled from 'styled-components';
+
+import { usePolymarketBet } from 'hooks/usePolymarketBet';
 
 const { Title, Text, Link } = Typography;
 
@@ -43,23 +45,25 @@ const AchievementContainer = styled.div`
   background-repeat: no-repeat;
 `;
 
-const DUMMY_ACHIEVEMENT_DATA = {
-  title: 'Successful prediction',
-  agentName: 'Polystrat',
-  platform: 'Polymarket',
-  platformUrl: 'https://polymarket.com',
-  question: 'Does Google have the best AI model end of January?',
-  position: 'Yes',
-  amount: '$1.0',
-  won: '$2.4',
-  multiplier: '2.4x',
-  ctaUrl: 'https://olas.network/operate',
-};
+const Card = styled(AntdCard)`
+  background: ${ACHIEVEMENT_COLORS.background} !important;
+  border: 1px solid ${ACHIEVEMENT_COLORS.border} !important;
+  border-radius: 20px !important;
+  max-width: 624px;
+  width: 100%;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+`;
 
 const StatItem = ({ label, value }: { label: string; value: string }) => (
   <Flex vertical gap={4} style={{ maxWidth: 155, flex: 1 }}>
     <Text style={{ fontSize: 14, color: ACHIEVEMENT_COLORS.textSecondary }}>{label}</Text>
-    <Text style={{ fontSize: 20, fontWeight: 600, color: ACHIEVEMENT_COLORS.textPrimary }}>
+    <Text
+      style={{
+        fontSize: 20,
+        fontWeight: 600,
+        color: ACHIEVEMENT_COLORS.textPrimary,
+      }}
+    >
       {value}
     </Text>
   </Flex>
@@ -68,24 +72,45 @@ const StatItem = ({ label, value }: { label: string; value: string }) => (
 export const Payout = () => {
   const router = useRouter();
   const betId = router.query.betId as string;
-  const data = DUMMY_ACHIEVEMENT_DATA;
+  const { data, isLoading, error } = usePolymarketBet(betId);
 
   if (!router.isReady || !betId) return null;
 
+  // Loading state
+  if (isLoading) {
+    return (
+      <AchievementContainer>
+        <Card
+          style={{
+            padding: 0,
+            minHeight: 400,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Spin size="large" />
+        </Card>
+      </AchievementContainer>
+    );
+  }
+
+  // Error state
+  if (error || !data) {
+    return (
+      <AchievementContainer>
+        <Card style={{ padding: 24 }}>
+          <Text style={{ color: ACHIEVEMENT_COLORS.textPrimary }}>
+            {error ? 'Failed to load achievement data' : 'No data available'}
+          </Text>
+        </Card>
+      </AchievementContainer>
+    );
+  }
+
   return (
     <AchievementContainer>
-      <Card
-        style={{
-          background: ACHIEVEMENT_COLORS.background,
-          border: `1px solid ${ACHIEVEMENT_COLORS.border}`,
-          borderRadius: 20,
-          padding: 0,
-          maxWidth: 624,
-          width: '100%',
-          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
-        }}
-        styles={{ body: { padding: 24 } }}
-      >
+      <Card style={{ padding: 0 }} styles={{ body: { padding: 24 } }}>
         <Flex justify="space-between" align="flex-start" style={{ marginBottom: 18 }}>
           <Flex vertical gap={4}>
             <Title
@@ -97,10 +122,10 @@ export const Payout = () => {
                 color: ACHIEVEMENT_COLORS.textPrimary,
               }}
             >
-              {data.title}
+              Successful prediction
             </Title>
             <Link
-              href={data.platformUrl}
+              href={`https://polygonscan.com/tx/${data.transactionHash}`}
               target="_blank"
               style={{
                 display: 'inline-flex',
@@ -110,7 +135,7 @@ export const Payout = () => {
                 color: ACHIEVEMENT_COLORS.textSecondary,
               }}
             >
-              Made by Polystrat AI agent on {data.platform} <ExternalLinkIcon size={14} />
+              Made by Polystrat AI agent on Polymarket <ExternalLinkIcon size={14} />
             </Link>
           </Flex>
 
@@ -124,11 +149,11 @@ export const Payout = () => {
               borderRadius: 10,
             }}
           >
-            {data.multiplier}
+            {data.multiplier}x
           </div>
         </Flex>
 
-        <Card
+        <AntdCard
           style={{
             background: ACHIEVEMENT_COLORS.backgroundDark,
             border: `1px solid ${ACHIEVEMENT_COLORS.border}`,
@@ -150,20 +175,26 @@ export const Payout = () => {
             {data.question}
           </Text>
 
-          <Divider style={{ margin: 0, marginBottom: 0, borderColor: ACHIEVEMENT_COLORS.border }} />
+          <Divider
+            style={{
+              margin: 0,
+              marginBottom: 0,
+              borderColor: ACHIEVEMENT_COLORS.border,
+            }}
+          />
 
           <Flex gap={24} style={{ padding: 20 }}>
             <StatItem label="Position" value={data.position} />
-            <StatItem label="Amount" value={data.amount} />
-            <StatItem label="Won" value={data.won} />
+            <StatItem label="Amount" value={data.betAmountFormatted} />
+            <StatItem label="Won" value={data.amountWonFormatted} />
           </Flex>
-        </Card>
+        </AntdCard>
 
         <Flex justify="center">
           <Button
             type="default"
             size="large"
-            href={data.ctaUrl}
+            href={'https://www.pearl.you/'}
             target="_blank"
             style={{
               display: 'flex',
