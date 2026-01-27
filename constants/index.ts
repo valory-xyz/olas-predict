@@ -71,3 +71,5 @@ export const COINGECKO_OLAS_IN_USD_PRICE_URL =
   'https://api.coingecko.com/api/v3/simple/token_price/xdai?contract_addresses=0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f&vs_currencies=usd';
 
 export const OLAS_ADDRESS = '0xce11e14225575945b8e6dc0d4f2dd4c570f79d9f';
+
+export const PEARL_WEBSITE_URL = 'https://pearl.you';
