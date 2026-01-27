@@ -74,6 +74,9 @@ const PredictApp = ({ Component, pageProps }: AppProps) => {
 
   const isAchievementPage = router.pathname.includes('/achievement');
 
+  // Extract SEO config from pageProps, with defaults
+  const seoConfig = pageProps.seoConfig || {};
+
   const content = (
     <ErrorBoundary>
       <Component {...pageProps} />
@@ -83,7 +86,7 @@ const PredictApp = ({ Component, pageProps }: AppProps) => {
   return (
     <PlausibleProvider domain="predict.olas.network" manualPageviews>
       <GlobalStyle />
-      <SEO />
+      <SEO {...seoConfig} />
       <PageViewTracker />
 
       <AutonolasThemeProvider>

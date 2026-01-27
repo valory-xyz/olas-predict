@@ -1,16 +1,15 @@
-import { useRouter } from 'next/router';
-
 import { AGENTS } from 'constants/index';
 
 import { PolystratAchievementCard } from './Polystrat';
 
-export const AchievementCard = () => {
-  const router = useRouter();
-  const { agent } = router.query;
+type AchievementCardProps = {
+  agent?: string;
+};
 
-  if (!router.isReady || !agent) return null;
+export const AchievementCard = ({ agent }: AchievementCardProps) => {
+  if (!agent) return null;
 
-  if (agent === AGENTS.POLYSTRAT) return <PolystratAchievementCard />;
+  if (agent.toLowerCase() === AGENTS.POLYSTRAT) return <PolystratAchievementCard />;
 
   return null;
 };

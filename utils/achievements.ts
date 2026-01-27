@@ -9,7 +9,7 @@ type AchievementQuery = {
 };
 
 const getLookupFileName = (agent: string, type: string) =>
-  `${ACHIEVEMENTS_LOOKUP_PREFIX}/${agent.toLowerCase()}/${type}`;
+  `${ACHIEVEMENTS_LOOKUP_PREFIX}/${agent.toLowerCase()}/${type}.json`;
 
 type AchievementLookupData = {
   [key: string]: {
