@@ -58,7 +58,7 @@ const ProgressBar = ({
 };
 
 const getAgentsBetsText = (agentsNum: number, totalBets: string) =>
-  `${agentsNum} AI agent${agentsNum == 1 ? '' : 's'} bet $${totalBets}`;
+  `${agentsNum} AI agent${agentsNum == 1 ? '' : 's'} traded $${totalBets}`;
 
 const AgentsBets = ({ marketId }: { marketId: FixedProductMarketMaker['id'] }) => {
   const { data, isLoading } = useAgentsBets(marketId);

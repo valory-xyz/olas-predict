@@ -108,7 +108,7 @@ export const RoiCard = ({ agent }: RoiCardProps) => {
                 <>
                   <Paragraph type="secondary">
                     Total ROI shows your agent&apos;s overall earnings, including profits from
-                    predictions and staking rewards, minus all related costs such as bet amounts,
+                    predictions and staking rewards, minus all related costs such as trade amounts,
                     gas fees, and Mech request fees.
                   </Paragraph>
                   <Paragraph type="secondary">
