@@ -47,7 +47,7 @@ const getAchievementOgImage = (
   if (type === ACHIEVEMENT_TYPES.PAYOUT) {
     const betId = query.betId;
     if (typeof betId === 'string' && data[betId]?.ipfsUrl) {
-      return data[betId].ipfsUrl;
+      return data[betId].ipfsUrl || null;
     }
   }
 
