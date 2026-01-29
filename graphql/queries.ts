@@ -10,8 +10,10 @@ import {
   OLAS_MECH_SUBGRAPH_URL,
   OMEN_SUBGRAPH_URL,
   OMEN_THUMBNAIL_MAPPING_SUBGRAPH_URL,
+  POLYMARKET_SUBGRAPH_URL,
   XDAI_BLOCKS_SUBGRAPH_URL,
 } from 'constants/index';
+import { PolymarketBetResponse } from 'types/polymarket';
 
 import {
   AgentsGlobal,
@@ -472,6 +474,29 @@ const getStakingServiceQuery = gql`
   }
 `;
 
+const getPolymarketBetQuery = gql`
+  query GetPolymarketBet($id: ID!) {
+    bet(id: $id) {
+      id
+      transactionHash
+      shares
+      outcomeIndex
+      amount
+      question {
+        metadata {
+          title
+          outcomes
+        }
+        resolution {
+          payouts
+          settledPrice
+          winningIndex
+        }
+      }
+    }
+  }
+`;
+
 export const getDailyPredictAgentsPerformancesQuery = gql`
   query DailyPredictPerformances($agentIds: [Int!]!, $timestamp_gt: Int!, $timestamp_lt: Int!) {
     dailyAgentPerformances(
@@ -596,3 +621,6 @@ export const getOpenMarkets = async (params: { timestamp_gt: number }) =>
 
 export const getStakingService = async (params: { id: string }) =>
   request<{ service: Service | null }>(GNOSIS_STAKING_SUBGRAPH_URL, getStakingServiceQuery, params);
+
+export const getPolymarketBet = async (params: { id: string }) =>
+  request<PolymarketBetResponse>(POLYMARKET_SUBGRAPH_URL, getPolymarketBetQuery, params);

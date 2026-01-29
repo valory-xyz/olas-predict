@@ -69,25 +69,36 @@ const PageViewTracker = () => {
   return null;
 };
 
-const PredictApp = ({ Component, pageProps }: AppProps) => (
-  <PlausibleProvider domain="predict.olas.network" manualPageviews>
-    <GlobalStyle />
-    <SEO />
-    <PageViewTracker />
+const PredictApp = ({ Component, pageProps }: AppProps) => {
+  const router = useRouter();
 
-    <AutonolasThemeProvider>
-      <WagmiProvider config={wagmiConfig}>
-        <QueryClientProvider client={queryClient}>
-          <Layout>
-            <ErrorBoundary>
-              <Component {...pageProps} />
-            </ErrorBoundary>
-          </Layout>
-          <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-left" />
-        </QueryClientProvider>
-      </WagmiProvider>
-    </AutonolasThemeProvider>
-  </PlausibleProvider>
-);
+  const isAchievementPage = router.pathname.includes('/achievement');
+
+  // Extract SEO config from pageProps, with defaults
+  const seoConfig = pageProps.seoConfig || {};
+
+  const content = (
+    <ErrorBoundary>
+      <Component {...pageProps} />
+    </ErrorBoundary>
+  );
+
+  return (
+    <PlausibleProvider domain="predict.olas.network" manualPageviews>
+      <GlobalStyle />
+      <SEO {...seoConfig} />
+      <PageViewTracker />
+
+      <AutonolasThemeProvider>
+        <WagmiProvider config={wagmiConfig}>
+          <QueryClientProvider client={queryClient}>
+            {isAchievementPage ? content : <Layout>{content}</Layout>}
+            <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-left" />
+          </QueryClientProvider>
+        </WagmiProvider>
+      </AutonolasThemeProvider>
+    </PlausibleProvider>
+  );
+};
 
 export default PredictApp;

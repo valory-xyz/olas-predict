@@ -46,10 +46,10 @@ export const SEO = ({
 
       {/* Open Graph / Facebook */}
       <meta property="og:type" content={ogType} />
-      <meta property="og:url" content={canonicalUrl} />
-      <meta property="og:title" content={fullTitle} />
-      <meta property="og:description" content={description} />
-      <meta property="og:image" content={fullOgImage} />
+      <meta property="og:url" content={canonicalUrl} key="og:url" />
+      <meta property="og:title" content={fullTitle} key="og:title" />
+      <meta property="og:description" content={description} key="og:description" />
+      <meta property="og:image" content={fullOgImage} key="og:image" />
       <meta property="og:image:width" content="1200" />
       <meta property="og:image:height" content="600" />
       <meta property="og:site_name" content={SEO_CONFIG.defaultTitle} />
