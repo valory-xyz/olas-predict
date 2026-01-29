@@ -25,12 +25,16 @@ const AchievementPage = ({ agent, type }: AchievementPageProps) => {
 };
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
-  const { agent, type } = context.query;
+  const { agent, type } = context.query as {
+    agent: string;
+    type: AchievementType;
+    [key: string]: unknown;
+  };
 
   const ogImage = await fetchAchievementOgImage({
-    agent: agent as string,
-    type: type as AchievementType,
-    query: context.query as Record<string, unknown>,
+    agent,
+    type,
+    query: context.query,
   });
 
   return {
@@ -40,8 +44,8 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
         ogImage,
         noIndex: true,
       },
-      agent: agent as string,
-      type: type as AchievementType,
+      agent,
+      type,
     },
   };
 };

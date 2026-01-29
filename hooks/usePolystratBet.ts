@@ -6,9 +6,9 @@ import { TransformedPolymarketBet } from 'types/polymarket';
 
 const USDC_DECIMALS = 6;
 
-export const usePolymarketBet = (betId: string) => {
+export const usePolystratBet = (betId: string) => {
   const { data, isLoading, error } = useQuery({
-    queryKey: ['getPolymarketBet', betId],
+    queryKey: ['getPolystratBet', betId],
     queryFn: async () => await getPolymarketBet({ id: betId }),
     enabled: !!betId,
   });

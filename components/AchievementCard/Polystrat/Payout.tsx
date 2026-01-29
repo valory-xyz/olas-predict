@@ -1,11 +1,11 @@
 import { Button as AntdButton, Card as AntdCard, Divider, Flex, Spin, Typography } from 'antd';
 import { useRouter } from 'next/router';
-import styled from 'styled-components';
+import styled, { css } from 'styled-components';
 
 import { ExternalLinkIcon } from 'components/shared/ExternalLinkIcon';
 import { PEARL_WEBSITE_URL, POLYGON_SCAN_URL } from 'constants/index';
 import { ACHIEVEMENT_COLORS } from 'constants/theme';
-import { usePolymarketBet } from 'hooks/usePolymarketBet';
+import { usePolystratBet } from 'hooks/usePolystratBet';
 
 const { Title, Text, Link } = Typography;
 
@@ -22,13 +22,35 @@ const AchievementContainer = styled.div`
   background-repeat: no-repeat;
 `;
 
-const AchievementCard = styled(AntdCard)`
+const achievementCardStyles = css`
   background: ${ACHIEVEMENT_COLORS.BACKGROUND} !important;
   border: 1px solid ${ACHIEVEMENT_COLORS.BORDER} !important;
   border-radius: 20px !important;
   max-width: 624px;
   width: 100%;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+`;
+
+const AchievementCard = styled(AntdCard)`
+  ${achievementCardStyles}
+`;
+
+const AchievementCardLoading = styled(AntdCard)`
+  ${achievementCardStyles}
+  padding: 0;
+  min-height: 400px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+`;
+
+const Multiplier = styled.div`
+  background: ${ACHIEVEMENT_COLORS.ACCENT_LIGHT};
+  color: ${ACHIEVEMENT_COLORS.ACCENT};
+  font-size: 32px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 10px;
 `;
 
 const MarketCard = styled(AntdCard)`
@@ -68,27 +90,19 @@ const StatItem = ({ label, value }: { label: string; value: string }) => (
   </Flex>
 );
 
-export const Payout = () => {
-  const router = useRouter();
-  const betId = router.query.betId as string;
-  const { data, isLoading, error } = usePolymarketBet(betId);
+type PayoutInnerProps = {
+  betId: string;
+};
 
-  if (!router.isReady || !betId) return null;
+export const PayoutInner = ({ betId }: PayoutInnerProps) => {
+  const { data, isLoading, error } = usePolystratBet(betId);
 
   if (isLoading) {
     return (
       <AchievementContainer>
-        <AchievementCard
-          style={{
-            padding: 0,
-            minHeight: 400,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
+        <AchievementCardLoading>
           <Spin size="large" />
-        </AchievementCard>
+        </AchievementCardLoading>
       </AchievementContainer>
     );
   }
@@ -136,18 +150,7 @@ export const Payout = () => {
             </Link>
           </Flex>
 
-          <div
-            style={{
-              background: ACHIEVEMENT_COLORS.ACCENT_LIGHT,
-              color: ACHIEVEMENT_COLORS.ACCENT,
-              fontSize: 32,
-              fontWeight: 600,
-              padding: '6px 12px',
-              borderRadius: 10,
-            }}
-          >
-            {data.multiplier}x
-          </div>
+          <Multiplier>{data.multiplier}x</Multiplier>
         </Flex>
 
         <MarketCard styles={{ body: { padding: 0 } }}>
@@ -192,4 +195,13 @@ export const Payout = () => {
       </AchievementCard>
     </AchievementContainer>
   );
+};
+
+export const Payout = () => {
+  const router = useRouter();
+  const betId = router.query.betId as string;
+
+  if (!router.isReady || !betId) return null;
+
+  return <PayoutInner betId={betId} />;
 };

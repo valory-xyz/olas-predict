@@ -47,7 +47,7 @@ const getAchievementOgImage = (
   if (type === ACHIEVEMENT_TYPES.PAYOUT) {
     const betId = query.betId;
     if (typeof betId === 'string' && data[betId]?.ipfsUrl) {
-      return data[betId].ipfsUrl || null;
+      return data[betId].ipfsUrl;
     }
   }
 
@@ -72,12 +72,10 @@ export const fetchAchievementOgImage = async ({
   }
 
   try {
-    const data = await getLookupFile(agent, type);
-    const ogImage = getAchievementOgImage(data, type, query);
+    const achievement = await getLookupFile(agent, type);
+    const ogImage = getAchievementOgImage(achievement, type, query);
 
-    if (!ogImage) return defaultImage;
-
-    return ogImage;
+    return ogImage || defaultImage;
   } catch {
     return defaultImage;
   }
