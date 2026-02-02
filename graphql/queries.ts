@@ -13,7 +13,7 @@ import {
   POLYMARKET_SUBGRAPH_URL,
   XDAI_BLOCKS_SUBGRAPH_URL,
 } from 'constants/index';
-import { PolymarketBetResponse } from 'types/polymarket';
+import { PolymarketDataResponse } from 'types/polymarket';
 
 import {
   AgentsGlobal,
@@ -474,30 +474,24 @@ const getStakingServiceQuery = gql`
   }
 `;
 
-const getPolymarketBetQuery = gql`
-  query GetPolymarketBet($id: ID!) {
-    bet(id: $id) {
-      transactionHash
-      outcomeIndex
-      amount
-      bettor {
-        id
-      }
-      question {
-        id
-        metadata {
-          title
-          outcomes
+const getPolymarketDataQuery = gql`
+  query GetPolymarketData($id: String!) {
+    marketParticipants(where: { bets_: { id: $id } }) {
+      totalPayout
+      bets {
+        transactionHash
+        outcomeIndex
+        amount
+        bettor {
+          id
+        }
+        question {
+          metadata {
+            title
+            outcomes
+          }
         }
       }
-    }
-  }
-`;
-
-const getPolymarketMarketParticipantQuery = gql`
-  query GetPolymarketMarketParticipant($id: ID!) {
-    marketParticipant(id: $id) {
-      totalPayout
     }
   }
 `;
@@ -638,22 +632,10 @@ const getPolyStratQueryHeaders = () => {
   };
 };
 
-export const getPolymarketBet = async (params: { id: string }) =>
-  request<PolymarketBetResponse>(
+export const getPolymarketData = async (params: { id: string }) =>
+  request<PolymarketDataResponse>(
     POLYMARKET_SUBGRAPH_URL,
-    getPolymarketBetQuery,
-    params,
-    getPolyStratQueryHeaders(),
-  );
-
-export const getPolymarketMarketParticipant = async (params: { id: string }) =>
-  request<{
-    marketParticipant: {
-      totalPayout: string;
-    } | null;
-  }>(
-    POLYMARKET_SUBGRAPH_URL,
-    getPolymarketMarketParticipantQuery,
+    getPolymarketDataQuery,
     params,
     getPolyStratQueryHeaders(),
   );

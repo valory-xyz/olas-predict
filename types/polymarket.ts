@@ -5,7 +5,7 @@ type PolymarketBetMetadata = {
 
 type PolymarketBetQuestion = {
   id: string;
-  metadata: PolymarketBetMetadata;
+  metadata: PolymarketBetMetadata | null;
 };
 
 type PolymarketBettor = {
@@ -17,11 +17,16 @@ export type PolymarketBet = {
   outcomeIndex: string;
   amount: string;
   bettor: PolymarketBettor;
-  question: PolymarketBetQuestion;
+  question: PolymarketBetQuestion | null;
 };
 
-export type PolymarketBetResponse = {
-  bet: PolymarketBet | null;
+export type PolymarketParticipantData = {
+  totalPayout: string;
+  bets: PolymarketBet[];
+};
+
+export type PolymarketDataResponse = {
+  marketParticipants: PolymarketParticipantData[];
 };
 
 export type TransformedPolymarketBet = {
