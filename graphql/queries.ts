@@ -627,12 +627,33 @@ export const getOpenMarkets = async (params: { timestamp_gt: number }) =>
 export const getStakingService = async (params: { id: string }) =>
   request<{ service: Service | null }>(GNOSIS_STAKING_SUBGRAPH_URL, getStakingServiceQuery, params);
 
+const getPolyStratQueryHeaders = () => {
+  // TODO: Remove this logic once we have the production URL
+  if (!process.env.NEXT_PUBLIC_POLYMARKET_SUBGRAPH_API_KEY) {
+    throw new Error('NEXT_PUBLIC_POLYMARKET_SUBGRAPH_API_KEY is not defined');
+  }
+
+  return {
+    Authorization: `Bearer ${process.env.NEXT_PUBLIC_POLYMARKET_SUBGRAPH_API_KEY}`,
+  };
+};
+
 export const getPolymarketBet = async (params: { id: string }) =>
-  request<PolymarketBetResponse>(POLYMARKET_SUBGRAPH_URL, getPolymarketBetQuery, params);
+  request<PolymarketBetResponse>(
+    POLYMARKET_SUBGRAPH_URL,
+    getPolymarketBetQuery,
+    params,
+    getPolyStratQueryHeaders(),
+  );
 
 export const getPolymarketMarketParticipant = async (params: { id: string }) =>
   request<{
     marketParticipant: {
       totalPayout: string;
     } | null;
-  }>(POLYMARKET_SUBGRAPH_URL, getPolymarketMarketParticipantQuery, params);
+  }>(
+    POLYMARKET_SUBGRAPH_URL,
+    getPolymarketMarketParticipantQuery,
+    params,
+    getPolyStratQueryHeaders(),
+  );
