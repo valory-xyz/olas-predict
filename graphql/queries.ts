@@ -477,22 +477,27 @@ const getStakingServiceQuery = gql`
 const getPolymarketBetQuery = gql`
   query GetPolymarketBet($id: ID!) {
     bet(id: $id) {
-      id
       transactionHash
-      shares
       outcomeIndex
       amount
+      bettor {
+        id
+      }
       question {
+        id
         metadata {
           title
           outcomes
         }
-        resolution {
-          payouts
-          settledPrice
-          winningIndex
-        }
       }
+    }
+  }
+`;
+
+const getPolymarketMarketParticipantQuery = gql`
+  query GetPolymarketMarketParticipant($id: ID!) {
+    marketParticipant(id: $id) {
+      totalPayout
     }
   }
 `;
@@ -624,3 +629,10 @@ export const getStakingService = async (params: { id: string }) =>
 
 export const getPolymarketBet = async (params: { id: string }) =>
   request<PolymarketBetResponse>(POLYMARKET_SUBGRAPH_URL, getPolymarketBetQuery, params);
+
+export const getPolymarketMarketParticipant = async (params: { id: string }) =>
+  request<{
+    marketParticipant: {
+      totalPayout: string;
+    } | null;
+  }>(POLYMARKET_SUBGRAPH_URL, getPolymarketMarketParticipantQuery, params);
