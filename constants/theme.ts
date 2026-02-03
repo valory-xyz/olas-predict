@@ -16,6 +16,18 @@ export const COLOR = {
   WHITE_TRANSPARENT_10: 'rgba(255, 255, 255, 0.1)',
   WHITE_TRANSPARENT_20: 'rgba(255, 255, 255, 0.2)',
   WHITE_TRANSPARENT_50: 'rgba(255, 255, 255, 0.50)',
+  WHITE_TRANSPARENT_80: 'rgba(255, 255, 255, 0.8)',
+};
+
+export const ACHIEVEMENT_COLORS = {
+  BACKGROUND: '#3F2565',
+  BACKGROUND_DARK: '#2B194A',
+  BORDER: 'rgba(255, 255, 255, 0.1)',
+  TEXT_PRIMARY: '#FFFFFF',
+  TEXT_SECONDARY: 'rgba(255, 255, 255, 0.5)',
+  ACCENT: '#1AFF7B',
+  ACCENT_LIGHT: 'rgba(26, 255, 123, 0.1)',
+  SOFT_LIGHT: 'rgba(255, 255, 255, 0.8)',
 };
 
 export const BREAK_POINT = {

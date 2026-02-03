@@ -10,8 +10,10 @@ import {
   OLAS_MECH_SUBGRAPH_URL,
   OMEN_SUBGRAPH_URL,
   OMEN_THUMBNAIL_MAPPING_SUBGRAPH_URL,
+  POLYMARKET_SUBGRAPH_URL,
   XDAI_BLOCKS_SUBGRAPH_URL,
 } from 'constants/index';
+import { PolymarketDataResponse } from 'types/polymarket';
 
 import {
   AgentsGlobal,
@@ -472,6 +474,28 @@ const getStakingServiceQuery = gql`
   }
 `;
 
+const getPolymarketDataQuery = gql`
+  query GetPolymarketData($id: String!) {
+    marketParticipants(where: { bets_: { id: $id } }) {
+      totalPayout
+      bets(where: { id: $id }) {
+        transactionHash
+        outcomeIndex
+        amount
+        bettor {
+          id
+        }
+        question {
+          metadata {
+            title
+            outcomes
+          }
+        }
+      }
+    }
+  }
+`;
+
 export const getDailyPredictAgentsPerformancesQuery = gql`
   query DailyPredictPerformances($agentIds: [Int!]!, $timestamp_gt: Int!, $timestamp_lt: Int!) {
     dailyAgentPerformances(
@@ -596,3 +620,22 @@ export const getOpenMarkets = async (params: { timestamp_gt: number }) =>
 
 export const getStakingService = async (params: { id: string }) =>
   request<{ service: Service | null }>(GNOSIS_STAKING_SUBGRAPH_URL, getStakingServiceQuery, params);
+
+const getPolyStratQueryHeaders = () => {
+  // TODO: Remove this logic once we have the production URL
+  if (!process.env.NEXT_PUBLIC_POLYMARKET_SUBGRAPH_API_KEY) {
+    throw new Error('NEXT_PUBLIC_POLYMARKET_SUBGRAPH_API_KEY is not defined');
+  }
+
+  return {
+    Authorization: `Bearer ${process.env.NEXT_PUBLIC_POLYMARKET_SUBGRAPH_API_KEY}`,
+  };
+};
+
+export const getPolymarketData = async (params: { id: string }) =>
+  request<PolymarketDataResponse>(
+    POLYMARKET_SUBGRAPH_URL,
+    getPolymarketDataQuery,
+    params,
+    getPolyStratQueryHeaders(),
+  );
