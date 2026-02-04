@@ -78,4 +78,14 @@ export const OLAS_ADDRESS = '0xce11e14225575945b8e6dc0d4f2dd4c570f79d9f';
 
 export const PEARL_WEBSITE_URL = 'https://pearl.you';
 
+export const OLAS_PREDICT_DOMAIN = 'predict.olas.network';
+
+export const getPearlPolystratUrlWithUTM = (achievementType: string) => {
+  const params = new URLSearchParams({
+    utm_source: OLAS_PREDICT_DOMAIN,
+    utm_content: `polystrat-${achievementType}`,
+  });
+  return `${PEARL_WEBSITE_URL}/polystrat?${params.toString()}`;
+};
+
 export const ACHIEVEMENTS_LOOKUP_PREFIX = 'achievements-lookup';
