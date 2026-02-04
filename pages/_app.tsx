@@ -84,7 +84,12 @@ const PredictApp = ({ Component, pageProps }: AppProps) => {
   );
 
   return (
-    <PlausibleProvider domain="predict.olas.network" manualPageviews>
+    <PlausibleProvider
+      domain="predict.olas.network"
+      manualPageviews
+      trackOutboundLinks
+      taggedEvents
+    >
       <GlobalStyle />
       <SEO {...seoConfig} />
       <PageViewTracker />
