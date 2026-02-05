@@ -11,6 +11,7 @@ import { Layout } from 'components/Layout';
 import { SEO } from 'components/SEO';
 import { AutonolasThemeProvider } from 'components/Theme';
 import { GlobalStyle } from 'components/Theme/GlobalStyle';
+import { OLAS_PREDICT_DOMAIN } from 'constants/index';
 import { wagmiConfig } from 'constants/wagmiConfig';
 
 const queryClient = new QueryClient();
@@ -84,12 +85,7 @@ const PredictApp = ({ Component, pageProps }: AppProps) => {
   );
 
   return (
-    <PlausibleProvider
-      domain="predict.olas.network"
-      manualPageviews
-      trackOutboundLinks
-      taggedEvents
-    >
+    <PlausibleProvider domain={OLAS_PREDICT_DOMAIN} manualPageviews trackOutboundLinks taggedEvents>
       <GlobalStyle />
       <SEO {...seoConfig} />
       <PageViewTracker />
