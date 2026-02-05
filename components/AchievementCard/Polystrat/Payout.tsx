@@ -3,7 +3,7 @@ import { useRouter } from 'next/router';
 import styled, { css } from 'styled-components';
 
 import { ExternalLinkIcon } from 'components/shared/ExternalLinkIcon';
-import { PEARL_WEBSITE_URL, POLYGON_SCAN_URL } from 'constants/index';
+import { ACHIEVEMENT_TYPES, POLYGON_SCAN_URL, getPearlPolystratUrlWithUTM } from 'constants/index';
 import { ACHIEVEMENT_COLORS } from 'constants/theme';
 import { usePolystratBet } from 'hooks/usePolystratBet';
 
@@ -182,7 +182,13 @@ export const PayoutInner = ({ betId }: PayoutInnerProps) => {
         </MarketCard>
 
         <Flex justify="center">
-          <Button type="default" size="large" href={PEARL_WEBSITE_URL} target="_blank">
+          <Button
+            type="default"
+            size="large"
+            href={getPearlPolystratUrlWithUTM(ACHIEVEMENT_TYPES.PAYOUT)}
+            target="_blank"
+            className="plausible-event-name=Get+Your+Polystrat+Agent"
+          >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/images/polystrat-icon.png"
