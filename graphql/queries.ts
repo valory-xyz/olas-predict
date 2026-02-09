@@ -621,21 +621,5 @@ export const getOpenMarkets = async (params: { timestamp_gt: number }) =>
 export const getStakingService = async (params: { id: string }) =>
   request<{ service: Service | null }>(GNOSIS_STAKING_SUBGRAPH_URL, getStakingServiceQuery, params);
 
-const getPolyStratQueryHeaders = () => {
-  // TODO: Remove this logic once we have the production URL
-  if (!process.env.NEXT_PUBLIC_POLYMARKET_SUBGRAPH_API_KEY) {
-    throw new Error('NEXT_PUBLIC_POLYMARKET_SUBGRAPH_API_KEY is not defined');
-  }
-
-  return {
-    Authorization: `Bearer ${process.env.NEXT_PUBLIC_POLYMARKET_SUBGRAPH_API_KEY}`,
-  };
-};
-
 export const getPolymarketData = async (params: { id: string }) =>
-  request<PolymarketDataResponse>(
-    POLYMARKET_SUBGRAPH_URL,
-    getPolymarketDataQuery,
-    params,
-    getPolyStratQueryHeaders(),
-  );
+  request<PolymarketDataResponse>(POLYMARKET_SUBGRAPH_URL, getPolymarketDataQuery, params);
