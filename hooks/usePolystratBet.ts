@@ -24,9 +24,9 @@ export const usePolystratBet = (betId: string) => {
 
     if (!marketParticipant || !bet) return null;
 
-    const { question, amount, transactionHash } = bet;
-    const outcomeIndex = parseInt(bet.outcomeIndex);
-    const position = question?.metadata?.outcomes?.[outcomeIndex] || NA;
+    const { question, amount, transactionHash, outcomeIndex } = bet ?? {};
+    const parsedOutcomeIndex = parseInt(outcomeIndex);
+    const position = question?.metadata?.outcomes?.[parsedOutcomeIndex] || NA;
 
     const betAmount = parseInt(amount) / Math.pow(10, USDC_DECIMALS);
     const amountWon = parseInt(marketParticipant.totalPayout) / Math.pow(10, USDC_DECIMALS);
