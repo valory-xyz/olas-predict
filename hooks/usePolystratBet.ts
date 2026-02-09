@@ -6,6 +6,7 @@ import { NA } from 'constants/index';
 import { TransformedPolymarketBet } from 'types/polymarket';
 
 const USDC_DECIMALS = 6;
+const OUTCOMES = ['Yes', 'No'];
 
 export const usePolystratBet = (betId: string) => {
   const {
@@ -26,7 +27,7 @@ export const usePolystratBet = (betId: string) => {
 
     const { question, amount, transactionHash, outcomeIndex } = bet ?? {};
     const parsedOutcomeIndex = parseInt(outcomeIndex);
-    const position = question?.metadata?.outcomes?.[parsedOutcomeIndex] || NA;
+    const position = OUTCOMES[parsedOutcomeIndex] || NA;
 
     const betAmount = parseInt(amount) / Math.pow(10, USDC_DECIMALS);
     const amountWon = parseInt(marketParticipant.totalPayout) / Math.pow(10, USDC_DECIMALS);
