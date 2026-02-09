@@ -145,6 +145,7 @@ export const PayoutInner = ({ betId }: PayoutInnerProps) => {
                 fontSize: 14,
                 color: ACHIEVEMENT_COLORS.TEXT_SECONDARY,
               }}
+              rel="noopener noreferrer"
             >
               Made by Polystrat AI agent on Polymarket <ExternalLinkIcon size={14} />
             </Link>
@@ -188,6 +189,7 @@ export const PayoutInner = ({ betId }: PayoutInnerProps) => {
             href={getPearlPolystratUrlWithUTM(ACHIEVEMENT_TYPES.PAYOUT)}
             target="_blank"
             className="plausible-event-name=Get+Your+Polystrat+Agent"
+            rel="noopener noreferrer"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
