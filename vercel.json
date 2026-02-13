@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/prerender-achievements",
+      "schedule": "0 * * * *"
+    }
+  ]
+}
