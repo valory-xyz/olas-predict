@@ -89,3 +89,10 @@ export const getPearlPolystratUrlWithUTM = (achievementType: string) => {
 };
 
 export const ACHIEVEMENTS_LOOKUP_PREFIX = 'achievements-lookup';
+
+export const TIME_IN_SECONDS = {
+  FIVE_MINUTES: 300,
+  HALF_HOUR: 1800,
+  ONE_HOUR: 3600,
+  TWELVE_HOURS: 43200,
+};

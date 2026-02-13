@@ -11,13 +11,14 @@ type AchievementQuery = {
 const getLookupFileName = (agent: string, type: string) =>
   `${ACHIEVEMENTS_LOOKUP_PREFIX}/${agent.toLowerCase()}/${type}.json`;
 
-type AchievementLookupData = {
+export type AchievementLookupData = {
   [key: string]: {
     ipfsUrl?: string;
+    createdAt?: string;
   };
 };
 
-const getLookupFile = async (
+export const getLookupFile = async (
   agent: string,
   type: string,
 ): Promise<AchievementLookupData | null> => {

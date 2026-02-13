@@ -3,7 +3,7 @@ import { GetServerSideProps } from 'next';
 import Error from 'next/error';
 
 import { AchievementCard } from 'components/AchievementCard';
-import { ACHIEVEMENT_TYPES, AGENTS, AchievementType } from 'constants/index';
+import { ACHIEVEMENT_TYPES, AGENTS, AchievementType, TIME_IN_SECONDS } from 'constants/index';
 import { fetchAchievementOgImage } from 'utils/achievements';
 
 type AchievementPageProps = {
@@ -36,6 +36,11 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     type,
     query: context.query,
   });
+
+  context.res.setHeader(
+    'Cache-Control',
+    `public, s-maxage=${TIME_IN_SECONDS.TWELVE_HOURS}, stale-while-revalidate=${TIME_IN_SECONDS.ONE_HOUR}`,
+  );
 
   return {
     props: {
