@@ -16,7 +16,35 @@ const TYPE = ACHIEVEMENT_TYPES.PAYOUT;
 const generateAchievementPageUrl = (betId: string) =>
   `https://${OLAS_PREDICT_DOMAIN}/${AGENT}/achievement?type=${TYPE}&betId=${betId}`;
 
-export default async function handler(_req: NextApiRequest, res: NextApiResponse<Result>) {
+const generateErrorResponse = (errorMessage: string) => {
+  return {
+    success: 0,
+    failed: 0,
+    warmed: [],
+    errors: [errorMessage],
+  };
+};
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse<Result>) {
+  if (req.method !== 'GET') {
+    return res.status(405).json(generateErrorResponse('Method Not Allowed'));
+  }
+
+  const authHeader = req.headers.authorization;
+  const cronSecret = process.env.CRON_SECRET;
+
+  if (!cronSecret) {
+    return res
+      .status(500)
+      .json(generateErrorResponse('Server configuration error: CRON_SECRET is not set'));
+  }
+
+  if (!authHeader || authHeader !== `Bearer ${cronSecret}`) {
+    return res
+      .status(401)
+      .json(generateErrorResponse('Unauthorized: Invalid or missing authorization token'));
+  }
+
   const result: Result = {
     success: 0,
     failed: 0,
