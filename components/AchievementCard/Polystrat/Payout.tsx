@@ -4,7 +4,7 @@ import styled, { css } from 'styled-components';
 
 import { ExternalLinkIcon } from 'components/shared/ExternalLinkIcon';
 import { ACHIEVEMENT_TYPES, POLYGON_SCAN_URL, getPearlPolystratUrlWithUTM } from 'constants/index';
-import { ACHIEVEMENT_COLORS } from 'constants/theme';
+import { ACHIEVEMENT_COLORS, MEDIA_QUERY } from 'constants/theme';
 import { usePolystratBet } from 'hooks/usePolystratBet';
 
 const { Title, Text, Link } = Typography;
@@ -20,6 +20,10 @@ const AchievementContainer = styled.div`
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
+
+  ${MEDIA_QUERY.mobile} {
+    padding: 16px;
+  }
 `;
 
 const achievementCardStyles = css`
@@ -51,6 +55,12 @@ const Multiplier = styled.div`
   font-weight: 600;
   padding: 6px 12px;
   border-radius: 10px;
+  white-space: nowrap;
+
+  ${MEDIA_QUERY.mobile} {
+    font-size: 24px;
+    padding: 4px 10px;
+  }
 `;
 
 const MarketCard = styled(AntdCard)`
@@ -58,6 +68,19 @@ const MarketCard = styled(AntdCard)`
   border: 1px solid ${ACHIEVEMENT_COLORS.BORDER};
   border-radius: 14px;
   margin-bottom: 24px;
+`;
+
+const CardHeader = styled(Flex)`
+  margin-bottom: 18px;
+  justify-content: space-between;
+  align-items: flex-start;
+
+  ${MEDIA_QUERY.mobile} {
+    gap: 10px;
+    text-align: center;
+    align-items: center;
+    flex-direction: column-reverse;
+  }
 `;
 
 const Button = styled(AntdButton)`
@@ -75,8 +98,17 @@ const Button = styled(AntdButton)`
   font-weight: 500;
 `;
 
+const StatItemWrapper = styled(Flex)`
+  max-width: 155px;
+  flex: 1;
+
+  ${MEDIA_QUERY.mobile} {
+    max-width: none;
+  }
+`;
+
 const StatItem = ({ label, value }: { label: string; value: string }) => (
-  <Flex vertical gap={4} style={{ maxWidth: 155, flex: 1 }}>
+  <StatItemWrapper vertical gap={4}>
     <Text style={{ fontSize: 14, color: ACHIEVEMENT_COLORS.TEXT_SECONDARY }}>{label}</Text>
     <Text
       style={{
@@ -87,7 +119,7 @@ const StatItem = ({ label, value }: { label: string; value: string }) => (
     >
       {value}
     </Text>
-  </Flex>
+  </StatItemWrapper>
 );
 
 type PayoutInnerProps = {
@@ -122,7 +154,7 @@ export const PayoutInner = ({ betId }: PayoutInnerProps) => {
   return (
     <AchievementContainer>
       <AchievementCard style={{ padding: 0 }} styles={{ body: { padding: 24 } }}>
-        <Flex justify="space-between" align="flex-start" style={{ marginBottom: 18 }}>
+        <CardHeader>
           <Flex vertical gap={4}>
             <Title
               level={3}
@@ -152,7 +184,7 @@ export const PayoutInner = ({ betId }: PayoutInnerProps) => {
           </Flex>
 
           <Multiplier>{data.multiplier}x</Multiplier>
-        </Flex>
+        </CardHeader>
 
         <MarketCard styles={{ body: { padding: 0 } }}>
           <Text
