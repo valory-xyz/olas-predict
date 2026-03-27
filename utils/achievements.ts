@@ -14,7 +14,7 @@ export type AchievementEntryData = {
   createdAt?: string | number;
 };
 
-export type AchievementLookupData = {
+type AchievementLookupData = {
   [key: string]: AchievementEntryData;
 };
 
@@ -48,9 +48,12 @@ const getLegacyLookupFile = async (
   return await response.json();
 };
 
+const SKIP_LEGACY = process.env.NEXT_PUBLIC_SKIP_LEGACY_ACHIEVEMENTS === 'true';
+
 /**
  * Fetches a single achievement entry by its ID.
  * Tries the new per-entry format first, falls back to the legacy monolithic file.
+ * Set NEXT_PUBLIC_SKIP_LEGACY_ACHIEVEMENTS=true once migration is complete to skip legacy lookups.
  */
 export const getAchievementEntry = async (
   agent: string,
@@ -66,7 +69,9 @@ export const getAchievementEntry = async (
     if (response.ok) return await response.json();
   }
 
-  // Fall back to legacy monolithic file
+  if (SKIP_LEGACY) return null;
+
+  // Fall back to legacy monolithic file (remove after migration is confirmed complete)
   const legacyData = await getLegacyLookupFile(agent, type);
   if (legacyData && legacyData[entryId]) {
     return legacyData[entryId];
@@ -86,27 +91,33 @@ export const listAchievementEntries = async (
 ): Promise<{ betId: string; uploadedAt: Date }[]> => {
   const results = new Map<string, Date>();
 
-  // List per-entry blobs
+  // List per-entry blobs (paginated)
   const prefix = getDirectoryPrefix(agent, type);
-  const { blobs } = await list({ prefix });
-
-  for (const blob of blobs) {
-    const fileName = blob.pathname.split('/').pop() || '';
-    const betId = fileName.replace('.json', '');
-    const uploadedAt = new Date(blob.uploadedAt);
-    if (!since || uploadedAt >= since) {
-      results.set(betId, uploadedAt);
+  let cursor: string | undefined;
+  do {
+    const response = await list({ prefix, cursor });
+    for (const blob of response.blobs) {
+      const fileName = blob.pathname.split('/').pop() || '';
+      const betId = fileName.replace('.json', '');
+      const uploadedAt = new Date(blob.uploadedAt);
+      if (!since || uploadedAt >= since) {
+        results.set(betId, uploadedAt);
+      }
     }
-  }
+    cursor = response.hasMore ? response.cursor : undefined;
+  } while (cursor);
 
   // Also check legacy monolithic file for entries not yet in per-entry format
-  const legacyData = await getLegacyLookupFile(agent, type);
-  if (legacyData) {
-    for (const [betId, entry] of Object.entries(legacyData)) {
-      if (results.has(betId)) continue; // per-entry takes precedence
-      const createdAt = entry.createdAt ? new Date(entry.createdAt) : new Date(0);
-      if (!since || createdAt >= since) {
-        results.set(betId, createdAt);
+  // (remove after migration is confirmed complete)
+  if (!SKIP_LEGACY) {
+    const legacyData = await getLegacyLookupFile(agent, type);
+    if (legacyData) {
+      for (const [betId, entry] of Object.entries(legacyData)) {
+        if (results.has(betId)) continue; // per-entry takes precedence
+        const createdAt = entry.createdAt ? new Date(entry.createdAt) : new Date(0);
+        if (!since || createdAt >= since) {
+          results.set(betId, createdAt);
+        }
       }
     }
   }
@@ -117,10 +128,7 @@ export const listAchievementEntries = async (
   }));
 };
 
-const getAchievementOgImage = (
-  data: AchievementEntryData | null,
-  type: string,
-): string | null => {
+const getAchievementOgImage = (data: AchievementEntryData | null, type: string): string | null => {
   if (!data) return null;
 
   if (type === ACHIEVEMENT_TYPES.PAYOUT) {
