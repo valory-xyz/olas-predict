@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
 import { ACHIEVEMENT_TYPES, AGENTS, OLAS_PREDICT_DOMAIN } from 'constants/index';
-import { getLookupFile } from 'utils/achievements';
+import { listAchievementEntries } from 'utils/achievements';
 
 type Result = {
   success: number;
@@ -54,19 +54,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
 
   try {
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-    const lookupData = await getLookupFile(AGENT, TYPE);
+    const recentEntries = await listAchievementEntries(AGENT, TYPE, oneHourAgo);
 
-    if (!lookupData) {
-      result.errors.push(`No lookup file found for ${AGENT} ${TYPE}`);
+    if (!recentEntries.length) {
+      result.errors.push(`No recent achievements found for ${AGENT} ${TYPE}`);
       return res.status(200).json(result);
     }
 
-    const recentBetIds = Object.keys(lookupData).filter((betId) => {
-      const entry = lookupData[betId];
-      if (!entry.createdAt) return true;
-      const createdDate = new Date(entry.createdAt);
-      return createdDate >= oneHourAgo;
-    });
+    const recentBetIds = recentEntries.map((entry) => entry.betId);
 
     const fetchPromises = recentBetIds.map(async (betId) => {
       const achievementUrl = generateAchievementPageUrl(betId);
