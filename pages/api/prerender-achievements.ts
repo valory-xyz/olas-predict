@@ -15,7 +15,7 @@ const TYPE = ACHIEVEMENT_TYPES.PAYOUT;
 const CONCURRENCY_LIMIT = 5;
 
 const generateAchievementPageUrl = (betId: string) =>
-  `https://${OLAS_PREDICT_DOMAIN}/${AGENT}/achievement?type=${TYPE}&betId=${betId}`;
+  `https://${OLAS_PREDICT_DOMAIN}/${AGENT}/achievement?type=${TYPE}&betId=${encodeURIComponent(betId)}`;
 
 const generateErrorResponse = (errorMessage: string) => {
   return {

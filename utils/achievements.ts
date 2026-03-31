@@ -50,6 +50,9 @@ const getLegacyLookupFile = async (
 
 const SKIP_LEGACY = process.env.NEXT_PUBLIC_SKIP_LEGACY_ACHIEVEMENTS === 'true';
 
+// Only allow alphanumeric characters, hyphens, and underscores in entry IDs
+const VALID_ENTRY_ID = /^[\w-]+$/;
+
 /**
  * Fetches a single achievement entry by its ID.
  * Tries the new per-entry format first, falls back to the legacy monolithic file.
@@ -60,6 +63,8 @@ export const getAchievementEntry = async (
   type: string,
   entryId: string,
 ): Promise<AchievementEntryData | null> => {
+  if (!VALID_ENTRY_ID.test(entryId)) return null;
+
   // Try new per-entry format
   const entryBlobPrefix = getEntryPrefix(agent, type, entryId);
   const { blobs } = await list({ prefix: entryBlobPrefix, limit: 1 });
@@ -98,7 +103,9 @@ export const listAchievementEntries = async (
     const response = await list({ prefix, cursor });
     for (const blob of response.blobs) {
       const fileName = blob.pathname.split('/').pop() || '';
-      const betId = fileName.replace('.json', '');
+      if (!fileName || !fileName.endsWith('.json')) continue;
+      const betId = fileName.slice(0, -'.json'.length);
+      if (!betId) continue;
       const uploadedAt = new Date(blob.uploadedAt);
       if (!since || uploadedAt >= since) {
         results.set(betId, uploadedAt);
@@ -114,9 +121,14 @@ export const listAchievementEntries = async (
     if (legacyData) {
       for (const [betId, entry] of Object.entries(legacyData)) {
         if (results.has(betId)) continue; // per-entry takes precedence
-        const createdAt = entry.createdAt ? new Date(entry.createdAt) : new Date(0);
-        if (!since || createdAt >= since) {
-          results.set(betId, createdAt);
+        if (entry.createdAt) {
+          const createdAt = new Date(entry.createdAt);
+          if (!since || createdAt >= since) {
+            results.set(betId, createdAt);
+          }
+        } else {
+          // Entries without createdAt are treated as recent to preserve legacy behavior
+          results.set(betId, new Date());
         }
       }
     }
