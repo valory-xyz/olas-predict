@@ -85,61 +85,6 @@ export const getAchievementEntry = async (
   return null;
 };
 
-/**
- * Lists all achievement entries for an agent/type, optionally filtered by recency.
- * Merges results from both new per-entry blobs and legacy monolithic file.
- */
-export const listAchievementEntries = async (
-  agent: string,
-  type: string,
-  since?: Date,
-): Promise<{ betId: string; uploadedAt: Date }[]> => {
-  const results = new Map<string, Date>();
-
-  // List per-entry blobs (paginated)
-  const prefix = getDirectoryPrefix(agent, type);
-  let cursor: string | undefined;
-  do {
-    const response = await list({ prefix, cursor });
-    for (const blob of response.blobs) {
-      const fileName = blob.pathname.split('/').pop() || '';
-      if (!fileName || !fileName.endsWith('.json')) continue;
-      const betId = fileName.slice(0, -'.json'.length);
-      if (!betId) continue;
-      const uploadedAt = new Date(blob.uploadedAt);
-      if (!since || uploadedAt >= since) {
-        results.set(betId, uploadedAt);
-      }
-    }
-    cursor = response.hasMore ? response.cursor : undefined;
-  } while (cursor);
-
-  // Also check legacy monolithic file for entries not yet in per-entry format
-  // (remove after migration is confirmed complete)
-  if (!SKIP_LEGACY) {
-    const legacyData = await getLegacyLookupFile(agent, type);
-    if (legacyData) {
-      for (const [betId, entry] of Object.entries(legacyData)) {
-        if (results.has(betId)) continue; // per-entry takes precedence
-        if (entry.createdAt) {
-          const createdAt = new Date(entry.createdAt);
-          if (!since || createdAt >= since) {
-            results.set(betId, createdAt);
-          }
-        } else {
-          // Entries without createdAt are treated as recent to preserve legacy behavior
-          results.set(betId, new Date());
-        }
-      }
-    }
-  }
-
-  return Array.from(results.entries()).map(([betId, uploadedAt]) => ({
-    betId,
-    uploadedAt,
-  }));
-};
-
 const getAchievementOgImage = (data: AchievementEntryData | null, type: string): string | null => {
   if (!data) return null;
 
