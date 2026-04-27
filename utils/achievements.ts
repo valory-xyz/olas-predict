@@ -22,10 +22,6 @@ type AchievementLookupData = {
 const getEntryPrefix = (agent: string, type: string, entryId: string) =>
   `${ACHIEVEMENTS_LOOKUP_PREFIX}/${agent.toLowerCase()}/${type}/${entryId}.json`;
 
-// Per-entry directory prefix for listing: achievements-lookup/{agent}/{type}/
-const getDirectoryPrefix = (agent: string, type: string) =>
-  `${ACHIEVEMENTS_LOOKUP_PREFIX}/${agent.toLowerCase()}/${type}/`;
-
 // Legacy monolithic path: achievements-lookup/{agent}/{type}.json
 const getLegacyFileName = (agent: string, type: string) =>
   `${ACHIEVEMENTS_LOOKUP_PREFIX}/${agent.toLowerCase()}/${type}.json`;
