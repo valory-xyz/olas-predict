@@ -2,42 +2,10 @@
   "comment": "Suppress specific yarn-audit advisories with a stated reason and review date. Entries surface a CI warning past their `review` date but do not fail the audit job. See SUPPLY-CHAIN-SECURITY.md §5 — every entry must reference an advisory that is not exploitable in this app's actual code paths, with the rationale stated below. `dateAdded` is when the entry first landed; `review` is when the rationale should be re-evaluated.",
   "allowlist": [
     {
-      "id": 1097295,
-      "module": "next",
-      "title": "Next.js Server-Side Request Forgery in Server Actions",
-      "reason": "Server Actions feature is App Router only. This app is Pages Router (no app/ directory, no \"use server\" directives), so the vulnerable code path is not reachable. Cleared by upgrading to next>=14.1.1; tracked under the Next 13 → 14/15 migration TODO.",
-      "dateAdded": "2026-04-28",
-      "review": "2026-07-28"
-    },
-    {
-      "id": 1107420,
-      "module": "next",
-      "title": "Next.js authorization bypass vulnerability",
-      "reason": "Affects middleware authorization in App Router contexts. This app uses Pages Router only and ships no middleware.ts. Cleared by upgrading to next>=14.2.15; tracked under the Next 13 → 14/15 migration TODO.",
-      "dateAdded": "2026-04-28",
-      "review": "2026-07-28"
-    },
-    {
-      "id": 1111391,
-      "module": "next",
-      "title": "Next Vulnerable to Denial of Service with Server Components",
-      "reason": "React Server Components (RSC) is App Router only. This app is Pages Router (no app/ directory, no RSC files). Cleared by upgrading to next>=14.2.34; tracked under the Next 13 → 14/15 migration TODO.",
-      "dateAdded": "2026-04-28",
-      "review": "2026-07-28"
-    },
-    {
-      "id": 1112182,
-      "module": "next",
-      "title": "Next has a Denial of Service with Server Components - Incomplete Fix Follow-Up",
-      "reason": "Same RSC-only path as 1111391 — App Router only; not reachable in this Pages-Router app. Cleared by upgrading to next>=14.2.35; tracked under the Next 13 → 14/15 migration TODO.",
-      "dateAdded": "2026-04-28",
-      "review": "2026-07-28"
-    },
-    {
       "id": 1112653,
       "module": "next",
       "title": "Next.js HTTP request deserialization can lead to DoS when using insecure React Server Components",
-      "reason": "RSC-only DoS path. App Router only. Cleared by upgrading to next>=15.0.8; tracked under the Next 13 → 14/15 migration TODO.",
+      "reason": "RSC-only DoS path. App Router only. This app is Pages Router (no app/ directory, no \"use server\"/\"use client\" directives, no middleware.ts), so the vulnerable code path is not reachable. Cleared by upgrading to next>=15.0.8; tracked under the Next 14 → 15 migration TODO.",
       "dateAdded": "2026-04-28",
       "review": "2026-07-28"
     },
@@ -45,7 +13,7 @@
       "id": 1116376,
       "module": "next",
       "title": "Next.js has a Denial of Service with Server Components",
-      "reason": "RSC-only DoS path. App Router only. Cleared by upgrading to next>=15.5.15; tracked under the Next 13 → 14/15 migration TODO.",
+      "reason": "RSC-only DoS path. App Router only — not reachable in this Pages-Router app. Cleared by upgrading to next>=15.5.15; tracked under the Next 14 → 15 migration TODO.",
       "dateAdded": "2026-04-28",
       "review": "2026-07-28"
     }

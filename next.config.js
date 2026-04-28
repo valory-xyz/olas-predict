@@ -5,6 +5,11 @@ import { withPlausibleProxy } from 'next-plausible';
 
 export default withPlausibleProxy()({
   reactStrictMode: true,
+  // Next 14 collects per-page module data via worker subprocesses with a
+  // default 60s timeout. On Windows the worker startup overhead plus the
+  // wagmi/walletconnect import tree can push `_app` past that limit. Linux
+  // CI is faster but the higher ceiling costs nothing.
+  staticPageGenerationTimeout: 300,
   compiler: {
     styledComponents: true,
   },
