@@ -111,9 +111,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Verify all dependencies succeeded
+        # Treat `skipped` as failure too — otherwise adding `if: ...` to a
+        # required job later would silently green-light a skipped check.
         run: |
           if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]] || \
-             [[ "${{ contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
-            echo "::error::One or more required jobs did not succeed"
+             [[ "${{ contains(needs.*.result, 'cancelled') }}" == "true" ]] || \
+             [[ "${{ contains(needs.*.result, 'skipped') }}" == "true" ]]; then
+            echo "::error::One or more required jobs did not succeed (failure / cancelled / skipped)"
             exit 1
           fi

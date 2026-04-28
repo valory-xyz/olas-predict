@@ -82,6 +82,7 @@ if (result.error) {
 
 const lines = (result.stdout || '').split(/\r?\n/).filter(Boolean);
 const advisories = new Map();
+let summarySeen = false;
 for (const line of lines) {
   let parsed;
   try {
@@ -92,7 +93,27 @@ for (const line of lines) {
   if (parsed.type === 'auditAdvisory' && parsed.data && parsed.data.advisory) {
     const a = parsed.data.advisory;
     if (!advisories.has(a.id)) advisories.set(a.id, a);
+  } else if (parsed.type === 'auditSummary') {
+    summarySeen = true;
   }
+}
+
+// Fail closed on suspected truncation / network error / malformed yarn
+// output. A clean audit emits an `auditSummary` event even when the tree
+// is empty; an audit with findings emits one or more `auditAdvisory`
+// events. Seeing neither means something went wrong upstream (registry
+// 5xx, malformed manifest, killed process) and we must not pass the
+// gate on a silent zero.
+if (!summarySeen && advisories.size === 0) {
+  err(
+    `yarn audit produced no parseable advisory or summary events ` +
+      `(stdout had ${lines.length} non-empty line(s); exit code ${result.status}). ` +
+      `Refusing to pass the gate on empty output — likely a registry / network failure.`,
+  );
+  if (result.stderr && result.stderr.trim()) {
+    err(`yarn audit stderr (truncated to 1k): ${result.stderr.trim().slice(0, 1024)}`);
+  }
+  process.exit(1);
 }
 
 const highOrCritical = [...advisories.values()].filter(
