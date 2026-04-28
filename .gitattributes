@@ -1,0 +1,4 @@
+# Normalize line endings on commit so Windows checkouts don't churn the
+# diff and trigger prettier CRLF errors when files round-trip through a
+# Windows working tree.
+* text=auto eol=lf
