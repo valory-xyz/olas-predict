@@ -5,3 +5,16 @@ coverage
 .env
 .env.local
 .vscode/
+
+# Non-canonical lockfiles — yarn.lock is the source of truth (see SUPPLY-CHAIN-SECURITY.md §2)
+package-lock.json
+pnpm-lock.yaml
+
+# vercel
+.vercel
+
+# typescript — Next.js manages next-env.d.ts and rewrites it on every
+# `next build` / `next dev`. The file's own header says "do not edit".
+# Tracking it just churns the diff (and Next 15+ adds a reference path
+# to the gitignored .next/types/routes.d.ts that some lint configs flag).
+next-env.d.ts

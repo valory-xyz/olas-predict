@@ -12,35 +12,111 @@ jobs:
     continue-on-error: False
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '20.x'
+      - name: Activate pinned Yarn via Corepack
+        run: |
+          corepack enable
+          corepack prepare yarn@1.22.22 --activate
       - name: Install modules
-        run: yarn
+        run: yarn install --frozen-lockfile
       - name: Run ESLint
         run: yarn lint
+
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '20.x'
+      - name: Activate pinned Yarn via Corepack
+        run: |
+          corepack enable
+          corepack prepare yarn@1.22.22 --activate
+      - name: Run audit gate (production deps only, with allowlist)
+        # Wraps `yarn audit --groups dependencies --json`, applies the
+        # high/critical gate explicitly (Yarn 1.x's --level only filters the
+        # *printed* output; the exit code is a severity bitmask, not a
+        # threshold), and consults .supply-chain/audit-allowlist.json so
+        # advisories that are not exploitable in this app's code paths can be
+        # suppressed with a stated reason and a review date.
+        # See SUPPLY-CHAIN-SECURITY.md §5.
+        run: yarn audit:prod
+
+  lockfile-lint:
+    name: Lockfile lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '20.x'
+      - name: Activate pinned Yarn via Corepack
+        run: |
+          corepack enable
+          corepack prepare yarn@1.22.22 --activate
+      - name: Install modules
+        run: yarn install --frozen-lockfile
+      - name: Validate yarn.lock registry URLs and integrity
+        run: yarn lint:lockfile
 
   scan:
     name: Gitleaks
     runs-on: ubuntu-latest
+    # Gitleaks runs from a precompiled binary downloaded over HTTPS; the
+    # `actions/setup-go` step from earlier revisions of this job was dead
+    # code (nothing in the job invokes `go`) and has been removed to
+    # shrink the supply-chain surface. The tarball is verified against a
+    # known SHA-256 before install — see SUPPLY-CHAIN-SECURITY.md §4.
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@v3
-        with:
-          go-version: "1.17.7"
-      - run: |
-          wget https://github.com/zricethezav/gitleaks/releases/download/v8.10.1/gitleaks_8.10.1_linux_x64.tar.gz && \
-          tar -xzf gitleaks_8.10.1_linux_x64.tar.gz && \
-          sudo install gitleaks /usr/bin && \
+      - name: Download and verify gitleaks v8.10.1
+        env:
+          GITLEAKS_VERSION: 8.10.1
+          GITLEAKS_SHA256: af479da920b8ba7bf9469bd2316c76522a59c563dd43213d1327aeb0a44c0dbf
+        run: |
+          set -euo pipefail
+          tarball="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSL -o "$tarball" \
+            "https://github.com/zricethezav/gitleaks/releases/download/v${GITLEAKS_VERSION}/${tarball}"
+          echo "${GITLEAKS_SHA256}  ${tarball}" | sha256sum -c -
+          tar -xzf "$tarball"
+          sudo install gitleaks /usr/bin
+      - name: Run gitleaks
+        run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             echo "Scanning PR commits from origin/${{ github.base_ref }} to HEAD"
             gitleaks detect --source=. --log-opts="origin/${{ github.base_ref }}..HEAD" --report-format json --report-path leak_report -v
           else
             echo "Scanning recent push commits"
             gitleaks detect --source=. --log-opts="HEAD~1..HEAD" --report-format json --report-path leak_report -v
+          fi
+
+  all-checks-passed:
+    # Single aggregate gate for branch protection. Keep this job's `needs`
+    # list in sync with every mandatory job above — branch protection requires
+    # only this context, so adding/removing a mandatory job is a workflow
+    # edit, not a branch-protection edit.
+    name: All checks passed
+    needs: [build, audit, lockfile-lint, scan]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify all dependencies succeeded
+        # Treat `skipped` as failure too — otherwise adding `if: ...` to a
+        # required job later would silently green-light a skipped check.
+        run: |
+          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]] || \
+             [[ "${{ contains(needs.*.result, 'cancelled') }}" == "true" ]] || \
+             [[ "${{ contains(needs.*.result, 'skipped') }}" == "true" ]]; then
+            echo "::error::One or more required jobs did not succeed (failure / cancelled / skipped)"
+            exit 1
           fi

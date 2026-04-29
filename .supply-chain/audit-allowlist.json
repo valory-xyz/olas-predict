@@ -1,0 +1,4 @@
+{
+  "comment": "Suppress specific yarn-audit advisories with a stated reason and review date. Entries surface a CI warning past their `review` date but do not fail the audit job. See SUPPLY-CHAIN-SECURITY.md §5 — every entry must reference an advisory that is not exploitable in this app's actual code paths, with the rationale stated below. `dateAdded` is when the entry first landed; `review` is when the rationale should be re-evaluated.",
+  "allowlist": []
+}

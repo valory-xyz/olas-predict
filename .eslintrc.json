@@ -42,5 +42,5 @@
     "react-hooks/rules-of-hooks": "error", 
     "react-hooks/exhaustive-deps": "warn"
   },
-  "ignorePatterns": ["graphql/types.ts"]
+  "ignorePatterns": ["graphql/types.ts", "next-env.d.ts"]
 }
