@@ -7,12 +7,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Olas Predict is a Next.js-based prediction market application built for the Olas Network. It displays and interacts with prediction markets where AI agents (Quickstart and Pearl) create and trade on questions about future events.
 
 **Tech Stack:**
-- Next.js 13 with TypeScript
+- Next.js 15 (Pages Router) with TypeScript
 - React 18 with Ant Design (AntD) UI components
 - Styled Components for styling
 - TanStack Query (React Query) for data fetching
-- Wagmi v2 for blockchain interactions on Gnosis Chain
-- GraphQL for subgraph queries
+- Wagmi v2 / viem configured for Gnosis Chain (read-only; no wallet connectors wired up — data comes from subgraphs, not on-chain reads)
+- GraphQL (graphql-request) for subgraph queries
+- Vercel Blob for achievement OG-image lookups (SSR only)
 
 ## Development Commands
 
@@ -32,6 +33,12 @@ yarn start
 # Lint codebase
 yarn lint
 
+# Lint the yarn.lock file (registry origins, integrity hashes)
+yarn lint:lockfile
+
+# Run the production dependency audit gate (blocks on unallowlisted high/critical CVEs)
+yarn audit:prod
+
 # Analyze bundle size
 yarn analyze
 ```
@@ -41,30 +48,39 @@ yarn analyze
 Copy `.env.example` to `.env.local` and configure:
 - `NEXT_PUBLIC_SUBGRAPH_API_KEY` - API key for The Graph subgraph access
 - `NEXT_PUBLIC_GNOSIS_URL` - RPC URL for Gnosis Chain (optional, falls back to default)
+- `NEXT_PUBLIC_REGISTRY_GRAPH_URL` - Olas registry subgraph (used by `utils/registry.ts` for the 7-day DAA banner)
+- `NEXT_PUBLIC_PREDICT_POLYMARKET_URL` - Polymarket subgraph (used by `usePolystratBet` on achievement pages)
+
+Runtime-only secrets (not in `.env.example`, configured in the Vercel dashboard):
+- `BLOB_READ_WRITE_TOKEN` - Vercel Blob read token used by `utils/achievements.ts` during SSR. Must stay runtime-only — never expose to the bundle.
 
 ## Architecture Overview
 
 ### Page Structure
 
-The app uses Next.js Pages Router with two main routes:
-- `/questions` - Lists prediction market questions with filters (opened/closed/finalized)
-- `/agents` - Shows agent statistics and trader information
-- Root `/` redirects to `/questions?state=opened`
+The app uses Next.js Pages Router. Top-level routes:
+- `/questions` - Lists prediction market questions with filters (all/opened/closed)
+- `/agents` - Three sections: trader agents, creator agents, mech agents
+- Root `/` redirects to `/questions?state=opened` (configured in `next.config.js`, no `pages/index.tsx`)
 
 Dynamic routes:
-- `/questions/[address]` - Individual question details
-- `/agents/[address]` - Individual agent details
+- `/questions/[id]` - Individual market detail (param is the FPMM address, lowercased before query)
+- `/agents/[id]` - Individual trader agent detail (param is the agent address)
+- `/[agent]/achievement/...` - Server-rendered achievement / payout cards (e.g. `/polystrat/payout?betId=...`). `getServerSideProps` validates the agent + type against enums (`AGENTS`, `ACHIEVEMENT_TYPES` in `constants/index.ts`) and pulls the OG-image URL from Vercel Blob via `utils/achievements.ts`. Bypasses the main `Layout` wrapper.
 
 ### Data Layer
 
 **GraphQL Subgraphs** (`graphql/queries.ts`):
-The app queries multiple subgraphs on Gnosis Chain:
-- **OMEN_SUBGRAPH_URL**: Main prediction market data (markets, trades, conditions)
-- **OLAS_AGENTS_SUBGRAPH_URL**: Agents and their predictions information
+The app queries multiple subgraphs (mostly Gnosis Chain):
+- **OMEN_SUBGRAPH_URL**: Main prediction market data (markets, trades, conditions, liquidity)
+- **OLAS_AGENTS_SUBGRAPH_URL**: Trader/creator agents, bets, global stats
 - **OLAS_MECH_SUBGRAPH_URL**: Mech agents and requests
-- **CONDITIONAL_TOKENS_SUBGRAPH_URL**: Token position data
+- **CONDITIONAL_TOKENS_SUBGRAPH_URL**: Token position data (currently unused by UI)
 - **GNOSIS_STAKING_SUBGRAPH_URL**: Staking statistics
 - **OMEN_THUMBNAIL_MAPPING_SUBGRAPH_URL**: Question thumbnail images
+- **XDAI_BLOCKS_SUBGRAPH_URL**: Maps timestamps to block numbers for the price-history chart
+- **Registry subgraph** (env: `NEXT_PUBLIC_REGISTRY_GRAPH_URL`): 7-day DAA averages for the `LiveAgentsBanner` (see `utils/registry.ts`)
+- **Polymarket subgraph** (env: `NEXT_PUBLIC_PREDICT_POLYMARKET_URL`): bet lookups for achievement pages (see `hooks/usePolystratBet.ts`)
 
 All GraphQL types are auto-generated in `graphql/types.ts` (ignored by ESLint).
 
@@ -100,14 +116,18 @@ All GraphQL types are auto-generated in `graphql/types.ts` (ignored by ESLint).
 ### State Management
 
 **TanStack Query** for server state:
-- Queries defined in custom hooks (`hooks/`)
-- Examples: `useAgentsBets`, `useMarketTrades`, `useOlasInUsdPrice`, `useOutcomeTokenMarginalPrices`
+- Queries defined in custom hooks (`hooks/`):
+  - `useMarketTrades` — last 1000 trades on a market
+  - `useOutcomeTokenMarginalPrices` — handles closed markets by falling back to the last liquidity event
+  - `useAgentsBets` — per-outcome agent participation aggregated from trades
+  - `useOlasInUsdPrice` — OLAS spot from CoinGecko
+  - `usePolystratBet` — Polymarket bet lookup for achievement pages
+  - `useScreen`, `useDropdown` — UI helpers (AntD breakpoints, mobile menu state)
 - React Query DevTools available in development (bottom-left)
 
 **Wagmi** for blockchain state:
-- Configuration in `constants/wagmiConfig.ts`
-- Connected to Gnosis Chain only
-- Used for reading on-chain data (conditional tokens, positions)
+- Configuration in `constants/wagmiConfig.ts` (Gnosis Chain transport only, no wallet connectors)
+- Currently **not used for any on-chain reads** — all data flows through subgraphs. The contract ABIs in `constants/contracts/` are present but unwired. Don't assume wagmi is on the data path when debugging.
 
 ### Utility Modules
 
@@ -124,11 +144,21 @@ All GraphQL types are auto-generated in `graphql/types.ts` (ignored by ESLint).
 - Timestamp conversions
 
 **`utils/ipfs.ts`**:
-- IPFS gateway URL construction
+- IPFS gateway URL construction (CIDv0 decoding from bytes32)
 - Uses `IPFS_GATEWAY_URL` for content retrieval
 
+**`utils/registry.ts`**:
+- Fetches 7-day average daily active agents from the Olas registry subgraph
+- Powers the `LiveAgentsBanner` on `/questions`
+- Hardcodes the predict agent IDs allowlist
+
+**`utils/achievements.ts`**:
+- Vercel Blob lookup for per-bet achievement OG-image entries
+- Used server-side in `getServerSideProps` of the `/[agent]/achievement` route
+- Has a legacy monolithic-file fallback gated by `NEXT_PUBLIC_SKIP_LEGACY_ACHIEVEMENTS`
+
 **`utils/flipside.ts`**:
-- Flipside API integration for analytics
+- Legacy Flipside DAA fetcher — superseded by `utils/registry.ts`. Don't extend; remove if you touch it.
 
 ### Constants
 
@@ -138,10 +168,15 @@ All GraphQL types are auto-generated in `graphql/types.ts` (ignored by ESLint).
 - External service URLs (Reality.eth, GnosisScan, Dune Analytics)
 - Known broken markets list
 - Invalid answer hex constant
+- Agent + achievement-type enums (`AGENTS`, `ACHIEVEMENT_TYPES`) used by the achievement route validator
 
 **`constants/filters.ts`**: Filter options for markets/agents
 
-**`constants/contracts/`**: On-chain contract ABIs and addresses
+**`constants/seo.ts`**: Per-page meta-tag config and helpers (`getMarketDescription`, `getAgentDescription`, `getQuestionsSeoContent`, `truncateForMeta`)
+
+**`constants/theme.ts`**: Colors, breakpoints (`sm: 576px`, `xl: 1240px`), `MEDIA_QUERY` helpers, AntD theme tokens
+
+**`constants/contracts/`**: On-chain contract ABIs and addresses (defined but not currently called)
 - `agentRegistry.ts`
 - `serviceRegistry.ts`
 
@@ -198,10 +233,22 @@ Types are generated from subgraph schemas. If schemas change:
 npx graphql-codegen
 ```
 
+## Supply-chain security
+
+This repo has a hardened dependency workflow — read `SUPPLY-CHAIN-SECURITY.md` before touching `package.json` or `yarn.lock`.
+
+- All direct **and** transitive deps are pinned to exact versions (no `^`/`~`). Transitive pins live in the `resolutions` block.
+- `yarn` is pinned to 1.22.22 via the `packageManager` field; CI uses `--frozen-lockfile`.
+- CI gates: `yarn lint:lockfile` (registry origins + integrity hashes) and `yarn audit:prod` (blocks high/critical advisories that aren't on the allowlist; suppressions live in `.supply-chain/audit-allowlist.json`).
+- New versions should wait ~7 days after release before being added (security advisories override this).
+- GitHub Actions are SHA-pinned in `.github/workflows/`.
+
 ## Common Gotchas
 
 - **Subgraph lag**: Data can be delayed by several blocks
 - **Invalid answers**: Filter out `0xffff...` answers in market queries
-- **Mobile layout**: Always test responsive behavior (breakpoint at 768px)
+- **Mobile layout**: Always test responsive behavior — actual breakpoints are `sm: 576px` and `xl: 1240px` (see `constants/theme.ts` / `MEDIA_QUERY`)
 - **IPFS content**: May be slow to load; implement loading states
 - **Gnosis Chain only**: Don't attempt multi-chain support without configuration changes
+- **Wagmi is not on the data path**: All reads go through subgraphs. Don't add on-chain reads without a clear reason — the wagmi config exists but is currently dormant.
+- **Achievement pages bypass `Layout`**: They're SSR with their own full-screen card and depend on `BLOB_READ_WRITE_TOKEN` at runtime.
