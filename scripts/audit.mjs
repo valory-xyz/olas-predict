@@ -38,15 +38,26 @@ const log = (msg) => process.stdout.write(msg + '\n');
 const warn = (msg) => process.stderr.write((isCI ? '::warning::' : 'WARNING: ') + msg + '\n');
 const err = (msg) => process.stderr.write((isCI ? '::error::' : 'ERROR: ') + msg + '\n');
 
-let allowlist = { allowlist: [] };
+let allowlistData = { entries: [] };
 try {
-  allowlist = JSON.parse(readFileSync(allowlistPath, 'utf8'));
+  allowlistData = JSON.parse(readFileSync(allowlistPath, 'utf8'));
 } catch (e) {
   warn(`Could not read allowlist at ${allowlistPath}: ${e.message}. Continuing with empty allowlist.`);
 }
+// Fail loudly if the file is still on the pre-migration `allowlist` key.
+// The schema migrated to `entries` in the same commit as this read path
+// — a stale key would silently no-op every suppression, which is the
+// worst possible failure mode for a security gate.
+if (allowlistData.allowlist !== undefined && allowlistData.entries === undefined) {
+  err(
+    `Allowlist at ${allowlistPath} uses the legacy "allowlist" key. ` +
+      `Migrate to "entries" — see SUPPLY-CHAIN-SECURITY.md §5 for the current schema.`,
+  );
+  process.exit(1);
+}
 const allowedIds = new Map();
 let allowlistInvalid = false;
-for (const entry of allowlist.allowlist || []) {
+for (const entry of allowlistData.entries || []) {
   // Coerce to Number so an entry written as "id": "1234" still matches the
   // numeric IDs from yarn audit. A silent miss here would mean the
   // allowlist suppression doesn't apply and the advisory fails the gate
