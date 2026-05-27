@@ -6,6 +6,8 @@
     "lint": "eslint ./",
     "lint:lockfile": "lockfile-lint --path yarn.lock --type yarn --allowed-hosts yarn npm --allowed-schemes https: --validate-integrity",
     "audit:prod": "node scripts/audit.mjs",
+    "audit:install-hooks": "node scripts/audit-install-hooks.mjs",
+    "audit:install-hooks:update": "node scripts/audit-install-hooks.mjs --update",
     "analyze": "ANALYZE=true next build"
   },
   "dependencies": {

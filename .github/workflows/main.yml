@@ -112,13 +112,37 @@ jobs:
             gitleaks detect --source=. --log-opts="HEAD~1..HEAD" --report-format json --report-path leak_report -v
           fi
 
+  install-hooks:
+    name: Install-hook diff
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+      - name: Activate pinned Yarn via Corepack
+        run: |
+          corepack enable
+          corepack prepare yarn@1.22.22 --activate
+      - name: Install (ignore lifecycle scripts)
+        # --ignore-scripts here is for the diff step only: the install-hook
+        # gate must never execute the postinstall scripts it is auditing.
+        # The repo-wide .yarnrc sets the same flag by default for local
+        # installs (see SUPPLY-CHAIN-SECURITY.md), so this is also what
+        # contributors see locally.
+        run: yarn install --frozen-lockfile --ignore-scripts
+      - name: Diff install-hook surface against allowlist
+        run: yarn audit:install-hooks
+
   all-checks-passed:
     # Single aggregate gate for branch protection. Keep this job's `needs`
     # list in sync with every mandatory job above — branch protection requires
     # only this context, so adding/removing a mandatory job is a workflow
     # edit, not a branch-protection edit.
     name: All checks passed
-    needs: [build, audit, lockfile-lint, scan]
+    needs: [build, audit, lockfile-lint, scan, install-hooks]
     if: always()
     runs-on: ubuntu-latest
     permissions: {}

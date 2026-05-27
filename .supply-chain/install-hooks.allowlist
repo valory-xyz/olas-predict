@@ -1,0 +1,17 @@
+# .supply-chain/install-hooks.allowlist
+#
+# Every package in node_modules that declares a non-trivial
+# preinstall / install / postinstall script. Regenerate with
+# `yarn audit:install-hooks:update` after any dependency change.
+# CI runs the same script without --update
+# and fails if this file drifts from the tree.
+#
+# Both the package name AND its recorded hook commands are gated:
+# changing a script in an already-listed package fails CI until
+# the allowlist is regenerated and the diff reviewed.
+
+bufferutil  # install: node-gyp-build
+keccak  # install: node-gyp-build || exit 0
+secp256k1  # install: node-gyp-build || exit 0
+sharp  # install: node install/check.js || npm run build
+utf-8-validate  # install: node-gyp-build
