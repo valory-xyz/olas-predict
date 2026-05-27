@@ -69,6 +69,45 @@ The CI step deliberately runs `yarn audit:prod`, not `yarn audit`. Yarn 1.x ship
 
 The audit job is **blocking**: it is included in `all-checks-passed.needs` and runs without `continue-on-error`, so any unallowlisted high or critical advisory that lands in the production tree will fail PRs until it is addressed.
 
+### 5a. Resolutions-first methodology for transitive CVE cleanup
+
+When a Dependabot alert names a transitive package and an upstream patch exists, **prefer fixing via a Yarn `resolutions` entry over dismissing or allowlisting**. The cost-benefit:
+
+| Path | Cost | Benefit |
+|---|---|---|
+| Add a `resolutions` entry | One line in [`package.json`](./package.json) + `yarn install` + verify gates pass | CVE cleared at the source; the alert closes automatically; future re-evaluation of "is this still safe?" is not needed |
+| Add an `.supply-chain/audit-allowlist.json` entry | One JSON entry + audit-trail commit + a review-date burden | Suppresses the CI gate but the underlying vuln remains in the tree; review-date triggers re-justification |
+| Dismiss the Dependabot alert manually | Single click | Dashboard noise gone, but the vuln remains and the dismissal isn't visible in code review |
+
+The "resolutions-first" rule applies when **all** of the following hold:
+
+- Upstream has published a patched version
+- The fix is a one-line resolution (single or path-scoped; see §5 of `.github/CODEOWNERS` for who reviews these)
+- No major-version conflicts in the tree (verify with `yarn why <pkg>`)
+- The bumped version doesn't break `yarn build`, `yarn lint`, `yarn audit:prod`, or `yarn audit:install-hooks`
+
+**Worked example: PR #49 (May 2026).** 22 of 25 open Dependabot alerts were cleared by adding 12 new `resolutions` entries and bumping 2 existing ones. The cleanup spanned four commits ordered by risk:
+
+1. 11 single-line flat resolutions for pure devDep transitives or PROD helpers with clean patches (12 alerts cleared, including `tmp`, `flatted`, `immutable`, `svgo`, `dset`, `js-yaml`, `micromatch`, `nanoid`, `postcss`, `@babel/runtime`, `ws`).
+2. `minimatch: 9.0.7` flat — collapsed three majors in the tree (3.x/5.x/9.x) into one (3 alerts cleared). ESLint runs minimatch on every linted file; `yarn lint` passed cleanly, confirming API compat.
+3. `bn.js: 5.2.3` + `h3: 1.15.9` for the wagmi wallet-stack transitives (4 alerts cleared). `bn.js` flat forced `elliptic` onto 5.x; `elliptic` is loaded but never invoked in this read-only app, so any API mismatch is silent.
+4. `uuid: 11.1.1` + `@metamask/sdk: 0.33.1` + `@metamask/sdk-communication-layer: 0.33.1` (3 alerts cleared). The new `@metamask/sdk` brought new peer-dep requirements (`cross-fetch`, `eciesjs`, `eventemitter2`, `readable-stream`, `socket.io-client`) that `yarn install` warns about — accepted because the wallet flow is never invoked. Side-effect: `secp256k1`'s install hook dropped out, shrinking [`.supply-chain/install-hooks.allowlist`](./.supply-chain/install-hooks.allowlist) from 5 entries to 4.
+
+The 3 remaining alerts had no upstream patch and are documented in §5b.
+
+### 5b. Tolerated no-patch advisories
+
+Two open Dependabot alerts have no upstream fix and are accepted as tolerable risk given this app's read-only-frontend posture. Both packages live in the wagmi → wallet-stack chain but are never reached at runtime (no wallet connectors are invoked from PROD code). These are NOT in [`.supply-chain/audit-allowlist.json`](./.supply-chain/audit-allowlist.json) because they don't trip the high/critical gate (one is `medium`, the other `low`); the documentation entry below IS the record of the maintainer's risk-accept.
+
+| Alert | Sev | Package | Vulnerable range | GHSA | Reason | Review by |
+|---|---|---|---|---|---|---|
+| #116 | medium | `@stablelib/ed25519` | `<= 2.0.2` (current: `1.0.3`) | GHSA-x3ff-w252-2g7j | Reachable only via `wagmi → @wagmi/connectors → @walletconnect → ... → @walletconnect/relay-auth → @stablelib/ed25519`. No upstream patch as of 2026-05-28. The wallet flow is never invoked in this app: wagmi is configured in [`constants/wagmiConfig.ts`](./constants/wagmiConfig.ts) with no wallet connectors, no `writeContract`, no signing — only read-only Gnosis Chain RPC. The connectors load into the bundle but their code paths are never entered. | 2026-11-28 |
+| #61 | low | `elliptic` | `<= 6.6.1` (current: `6.6.1`, pinned at the version cap via `resolutions`) | GHSA-848j-6mx2-7j84 | Reachable only via `wagmi → @wagmi/connectors → @walletconnect → @walletconnect/utils → elliptic`. No upstream patch as of 2026-05-28 (already at the latest published `6.6.1` which is the cap of the vulnerable range). Same wallet-flow-never-invoked rationale as #116. | 2026-11-28 |
+
+**Re-evaluate any of these if:** an upstream patch is published; this app adds a wallet-connection feature (`writeContract`, signing, any `@wagmi/connectors` use); or the package shifts to being reachable from a different code path.
+
+The Dependabot dashboard alerts for #116 and #61 should be manually dismissed with `tolerable_risk` and a comment pointing at this section. See the TODO in §9.
+
 ### 6. Avoid postinstall-heavy dependencies
 
 When adding a new dependency, check:
@@ -173,6 +212,7 @@ Before adding a new direct dependency:
 - [x] **Node version pin.** [`.nvmrc`](./.nvmrc) records the exact Node version; CI reads it via `node-version-file:`. `engines.node` in [`package.json`](./package.json) is set to `20.x` so a mismatched Node major fails `yarn install` immediately (Yarn-1's `engine-strict` is default-on). See [§2](#2-single-lockfile-treated-as-source-of-truth).
 - [x] **`packageManager` sha512 hash.** Corepack now verifies the Yarn 1.22.22 binary against the pinned digest. See [§2](#2-single-lockfile-treated-as-source-of-truth).
 - [x] **CODEOWNERS.** [`.github/CODEOWNERS`](./.github/CODEOWNERS) routes supply-chain-sensitive paths (`.supply-chain/`, `scripts/audit*.mjs`, workflows, security docs, `package.json` / `yarn.lock`) to dedicated review owners. Enforcement requires branch protection's "Require review from Code Owners" toggle on `main`.
+- [ ] **Manually dismiss the Dependabot dashboard alerts for #116 (`@stablelib/ed25519`) and #61 (`elliptic`)** with `tolerable_risk` and a comment pointing at [§5b](#5b-tolerated-no-patch-advisories). These are the two remaining open alerts after the PR #49 resolutions cleanup; both have no upstream patch and are documented as tolerated risk in §5b. Re-evaluate by the dates listed there.
 - [ ] **Automate the §4 cooldown rule.** Today the 7-day cooldown is enforced by manual reviewer discipline (check `npm view <pkg>@<ver> time` against the PR's `package.json` / `yarn.lock` diff). A small GitHub Action that diff-walks the lockfile and queries the npm registry for each newly-resolved version's publish time would catch a hot-published dep that slips past a reviewer. Sketch: parse `yarn.lock` from `base..HEAD`, extract the (name, version) tuples that are new or changed, hit `https://registry.npmjs.org/<name>` for each, fail the check if any `time[<version>]` is younger than 7 days unless the PR description includes a security-advisory ID.
 - [ ] **Add unit tests for [`scripts/audit.mjs`](./scripts/audit.mjs).** The script is load-bearing for every PR's audit gate. Fixture-driven tests would exercise the parsing path, the allowlist matching, the drift-detection warnings, the ID-coercion path, and the fail-closed-on-empty-output path. Mock yarn-audit JSON in, expected exit code and stdout/stderr out. Worth wiring into CI behind the existing `lockfile-lint` job.
 
