@@ -8,7 +8,7 @@
 # A PR matching multiple rules uses the LAST matching rule.
 
 # Default owner -- every change
-*                                  @mohandast52
+*                                  @Tanya-atatakai
 
 # Supply-chain config -- security owners must approve any change.
 # Mirrors the pattern used in olas-website, predict-api, and valory-website.
