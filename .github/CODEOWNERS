@@ -1,0 +1,26 @@
+# Code owners for olas-predict.
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+#
+# Enforcement requires branch protection -> "Require review from Code Owners"
+# to be enabled on `main`. Without it, CODEOWNERS only suggests reviewers; it
+# does not gate merge. See SUPPLY-CHAIN-SECURITY.md.
+#
+# A PR matching multiple rules uses the LAST matching rule.
+
+# Default owner -- every change
+*                                  @mohandast52
+
+# Supply-chain config -- security owners must approve any change.
+# Mirrors the pattern used in olas-website, predict-api, and valory-website.
+/.yarnrc                           @Tanya-atatakai @atepem
+/.nvmrc                            @Tanya-atatakai @atepem
+/.supply-chain/                    @Tanya-atatakai @atepem
+/scripts/audit.mjs                 @Tanya-atatakai @atepem
+/scripts/audit-install-hooks.mjs   @Tanya-atatakai @atepem
+/.github/workflows/                @Tanya-atatakai @atepem
+/.github/CODEOWNERS                @Tanya-atatakai @atepem
+/SECURITY.md                       @Tanya-atatakai @atepem
+/SUPPLY-CHAIN-SECURITY.md          @Tanya-atatakai @atepem
+/package.json                      @Tanya-atatakai @atepem
+/yarn.lock                         @Tanya-atatakai @atepem
+/vercel.json                       @Tanya-atatakai @atepem
