@@ -13,6 +13,9 @@ pnpm-lock.yaml
 # vercel
 .vercel
 
+# Internal scratch / planning notes — local-only, not project artifacts.
+.plans/
+
 # typescript — Next.js manages next-env.d.ts and rewrites it on every
 # `next build` / `next dev`. The file's own header says "do not edit".
 # Tracking it just churns the diff (and Next 15+ adds a reference path
