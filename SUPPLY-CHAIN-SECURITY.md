@@ -11,7 +11,7 @@ The attacks we care about:
 1. **Malicious publish** — a maintainer account is compromised (or a maintainer goes rogue) and a bad version of a legitimate package is published. Recent examples: `ua-parser-js` (2021), `node-ipc` protestware (2022), various `@ctrl/*` / `rspack`-related worms (2024–2025), the `shai-hulud` npm worm (2025).
 2. **Typosquatting / dependency confusion** — a look-alike name is installed instead of the intended package.
 3. **Postinstall script abuse** — a compromised package runs arbitrary code during `yarn install`, exfiltrating env vars or tokens from the build environment. Higher impact than on a static marketing site because this app reads `BLOB_READ_WRITE_TOKEN` from a server-side runtime path (see [§7](#7-secrets-hygiene-in-the-build-environment)).
-4. **Transitive compromise** — a deep, rarely-audited dependency is the attack vector. The `wagmi` + `viem` + Next.js + AntD tree is large.
+4. **Transitive compromise** — a deep, rarely-audited dependency is the attack vector. The `viem` + Next.js + AntD + `@graphql-codegen` (devDep) trees are the largest in this repo.
 
 ## Policies
 
@@ -86,27 +86,37 @@ The "resolutions-first" rule applies when **all** of the following hold:
 - No major-version conflicts in the tree (verify with `yarn why <pkg>`)
 - The bumped version doesn't break `yarn build`, `yarn lint`, `yarn audit:prod`, or `yarn audit:install-hooks`
 
-**Worked example: PR #49 (May 2026).** 22 of 25 open Dependabot alerts were cleared by adding 12 new `resolutions` entries and bumping 2 existing ones. The cleanup spanned four commits ordered by risk:
+**Worked example 1: PR #49 (May 2026)** — transitive-CVE cleanup via resolutions. 22 of 25 open Dependabot alerts cleared by adding 12 new `resolutions` entries and bumping 2 existing ones. Four commits ordered by risk:
 
 1. 11 single-line flat resolutions for pure devDep transitives or PROD helpers with clean patches (12 alerts cleared, including `tmp`, `flatted`, `immutable`, `svgo`, `dset`, `js-yaml`, `micromatch`, `nanoid`, `postcss`, `@babel/runtime`, `ws`).
 2. `minimatch: 9.0.7` flat — collapsed three majors in the tree (3.x/5.x/9.x) into one (3 alerts cleared). ESLint runs minimatch on every linted file; `yarn lint` passed cleanly, confirming API compat.
-3. `bn.js: 5.2.3` + `h3: 1.15.9` for the wagmi wallet-stack transitives (4 alerts cleared). `bn.js` flat forced `elliptic` onto 5.x; `elliptic` is loaded but never invoked in this read-only app, so any API mismatch is silent.
-4. `uuid: 11.1.1` + `@metamask/sdk: 0.33.1` + `@metamask/sdk-communication-layer: 0.33.1` (3 alerts cleared). The new `@metamask/sdk` brought new peer-dep requirements (`cross-fetch`, `eciesjs`, `eventemitter2`, `readable-stream`, `socket.io-client`) that `yarn install` warns about — accepted because the wallet flow is never invoked. Side-effect: `secp256k1`'s install hook dropped out, shrinking [`.supply-chain/install-hooks.allowlist`](./.supply-chain/install-hooks.allowlist) from 5 entries to 4.
+3. `bn.js: 5.2.3` + `h3: 1.15.9` for the wagmi wallet-stack transitives (4 alerts cleared).
+4. `uuid: 11.1.1` + `@metamask/sdk: 0.33.1` + `@metamask/sdk-communication-layer: 0.33.1` (3 alerts cleared).
 
-The 3 remaining alerts had no upstream patch and are documented in §5b.
+Left two no-patch alerts (`@stablelib/ed25519`, `elliptic`) that the next PR addressed at the root cause.
+
+**Worked example 2: Refactor wagmi → viem-only (May 2026)** — the deeper-fix follow-up to PR #49. Removed `wagmi` and `@wagmi/core` from `dependencies` entirely; the app already used viem types directly in most places, and the only wagmi call sites were `pages/_app.tsx` (`WagmiProvider` wrapper, removed), `constants/wagmiConfig.ts` (replaced by `viemConfig.ts` exporting a `createPublicClient`), and `components/MechAgents.tsx` (`readContract(wagmiConfig, …)` and `usePublicClient` swapped for `publicClient.readContract` / `publicClient.getLogs`).
+
+**Cascading effect — this is the pattern worth internalizing.** Removing a single direct dep (`wagmi`) and the build-tooling-only `@wagmi/core` collapsed the entire wallet-stack subtree (`@wagmi/connectors`, all of `@walletconnect/*`, `@metamask/sdk`, `@coinbase/wallet-sdk`, plus their deep transitives). Concretely:
+
+- 2 remaining Dependabot alerts (the no-patch wallet-stack entries from §5b) cleared automatically — the packages left the tree.
+- 12 entries in the `resolutions` block became deletable: `@coinbase/wallet-sdk`, `@metamask/sdk`, `@metamask/sdk-communication-layer`, `bn.js`, `defu`, `elliptic`, `h3`, `node-forge`, `secp256k1`, `sha.js`, `socket.io-parser`, `uuid`. The resolutions block shrunk from 28 entries to 19.
+- 3 of 4 entries in [`.supply-chain/install-hooks.allowlist`](./.supply-chain/install-hooks.allowlist) dropped (`bufferutil`, `keccak`, `utf-8-validate` — wallet-stack-only native modules). Only `sharp` (Next.js Image optimization) remains. **One fewer native install-hook in the supply chain per package removed** — the highest-impact security improvement from this refactor.
+- Shared Next.js bundle dropped from 309 kB → 291 kB (-18 kB). `_app` chunk dropped 214 kB → 196 kB.
+
+**The general lesson.** When a direct dep exists but its primary code path is unused (in this case, wallet connectors in a read-only-display app), the resolutions-first methodology in §5a is the *patch* — fixing the root cause by removing the dep is the *cure*. The cost-of-carrying analysis in §5a's first table understates this: every unused-dep-still-imported also carries the full *future* Dependabot churn of its entire transitive subtree. Periodically auditing direct deps against actual usage — "is this dep load-bearing or just historical?" — is high-value work.
 
 ### 5b. Tolerated no-patch advisories
 
-Two open Dependabot alerts have no upstream fix and are accepted as tolerable risk given this app's read-only-frontend posture. Both packages live in the wagmi → wallet-stack chain but are never reached at runtime (no wallet connectors are invoked from PROD code). These are NOT in [`.supply-chain/audit-allowlist.json`](./.supply-chain/audit-allowlist.json) because they don't trip the high/critical gate (one is `medium`, the other `low`); the documentation entry below IS the record of the maintainer's risk-accept.
+This section is the record of advisories accepted as tolerable risk when an upstream patch does not exist (or the reachable path is structurally inert). Entries here are NOT in [`.supply-chain/audit-allowlist.json`](./.supply-chain/audit-allowlist.json) because they don't trip the high/critical gate; this section is the documented risk-accept.
 
-| Alert | Sev | Package | Vulnerable range | GHSA | Reason | Review by |
-|---|---|---|---|---|---|---|
-| #116 | medium | `@stablelib/ed25519` | `<= 2.0.2` (current: `1.0.3`) | GHSA-x3ff-w252-2g7j | Reachable only via `wagmi → @wagmi/connectors → @walletconnect → ... → @walletconnect/relay-auth → @stablelib/ed25519`. No upstream patch as of 2026-05-28. The wallet flow is never invoked in this app: wagmi is configured in [`constants/wagmiConfig.ts`](./constants/wagmiConfig.ts) with no wallet connectors, no `writeContract`, no signing — only read-only Gnosis Chain RPC. The connectors load into the bundle but their code paths are never entered. | 2026-11-28 |
-| #61 | low | `elliptic` | `<= 6.6.1` (current: `6.6.1`, pinned at the version cap via `resolutions`) | GHSA-848j-6mx2-7j84 | Reachable only via `wagmi → @wagmi/connectors → @walletconnect → @walletconnect/utils → elliptic`. No upstream patch as of 2026-05-28 (already at the latest published `6.6.1` which is the cap of the vulnerable range). Same wallet-flow-never-invoked rationale as #116. | 2026-11-28 |
+**Currently: zero entries.**
 
-**Re-evaluate any of these if:** an upstream patch is published; this app adds a wallet-connection feature (`writeContract`, signing, any `@wagmi/connectors` use); or the package shifts to being reachable from a different code path.
+#### Historical (now resolved)
 
-The Dependabot dashboard alerts for #116 and #61 should be manually dismissed with `tolerable_risk` and a comment pointing at this section. See the TODO in §9.
+Earlier draft of this section carried two no-patch entries reachable only via the wagmi → wallet-stack chain (`@stablelib/ed25519` GHSA-x3ff-w252-2g7j and `elliptic` GHSA-848j-6mx2-7j84). Both were resolved by the wagmi → viem refactor (see §5a's worked example) — the entire `wagmi → @wagmi/connectors → @walletconnect/* → @metamask/sdk` chain left the tree, taking those packages with it. The Dependabot alerts close automatically.
+
+Future no-patch tolerances added to this section MUST include: sev, package, vuln range, GHSA, reason, review-by date, re-evaluation triggers. Re-evaluation triggers are essential: every tolerance is conditional on the assumption that produced it (e.g. "wallet flow never invoked") staying true.
 
 ### 6. Avoid postinstall-heavy dependencies
 
@@ -119,7 +129,7 @@ When adding a new dependency, check:
 **Olas-predict-specific watches:**
 
 - [`@vercel/blob`](https://www.npmjs.com/package/@vercel/blob) is what actually reads `BLOB_READ_WRITE_TOKEN` at runtime (see [§7](#7-secrets-hygiene-in-the-build-environment)). A compromised version could exfiltrate the token. Pin tightly and do not skip review on its transitive bumps.
-- [`wagmi`](https://www.npmjs.com/package/wagmi), [`viem`](https://www.npmjs.com/package/viem), [`@wagmi/core`](https://www.npmjs.com/package/@wagmi/core) — EVM client libraries. This app uses them **read-only** (`readContract`, `usePublicClient`) — no wallet connectors, no signing — so the blast radius of a compromised version is narrower than in a dapp that signs transactions. It is still a large transitive surface; scrutinize bumps.
+- [`viem`](https://www.npmjs.com/package/viem) — EVM client library. This app uses it **read-only** (`publicClient.readContract`, `publicClient.getLogs` in `components/MechAgents.tsx`) — no wallet connectors, no signing — so the blast radius of a compromised version is narrower than in a dapp that signs transactions. Wagmi was removed (see §5a worked example 2); do NOT add `wagmi` / `@wagmi/core` back to the deps without reading that section first.
 - [`graphql-request`](https://www.npmjs.com/package/graphql-request) is on the hot path for every page render (subgraph fetches). A compromised version could redirect requests off our subgraph endpoints.
 
 ### 6a. Install-hook diff gate
@@ -132,7 +142,7 @@ The `install-hooks` job in [.github/workflows/main.yml](./.github/workflows/main
 
 The CI job installs with `yarn install --frozen-lockfile --ignore-scripts` — the gate must **never** execute the scripts it is auditing. After a dep change locally, refresh the allowlist with `yarn audit:install-hooks:update`, review the diff, and commit. Each entry records both the package name and the exact hook command so a future contributor reviewing the diff sees what they are signing off on.
 
-Higher value here than on a static marketing site: the `wagmi` + `@walletconnect/*` + `@metamask/sdk` chain is large and actively maintained, so any of those packages could ship a new postinstall script in a future release. The gate makes that arrival reviewable instead of silent. Current allowlist entries are all expected for this stack — `bufferutil` / `utf-8-validate` (ws optional native deps), `keccak` / `secp256k1` (native crypto for web3), `sharp` (Next.js Image optimization).
+After the wagmi → viem refactor (§5a worked example 2), the install-hook surface is minimal: only `sharp` (Next.js Image optimization). Adding any dep that brings a new native module — especially anything in a wallet / crypto / web3 stack — will fail this gate until the maintainer reviews the new install hook and explicitly adds it to the allowlist via `yarn audit:install-hooks:update`.
 
 ### 6b. Local install scripts policy
 
@@ -161,7 +171,7 @@ Everything else read by the app is `NEXT_PUBLIC_*` configuration that Next.js in
 | Name | Where read |
 | --- | --- |
 | `NEXT_PUBLIC_SUBGRAPH_API_KEY` | [`constants/index.ts`](./constants/index.ts) — keys for The Graph queries |
-| `NEXT_PUBLIC_GNOSIS_URL` | [`constants/wagmiConfig.ts`](./constants/wagmiConfig.ts) — Gnosis Chain RPC |
+| `NEXT_PUBLIC_GNOSIS_URL` | [`constants/viemConfig.ts`](./constants/viemConfig.ts) — Gnosis Chain RPC |
 | `NEXT_PUBLIC_REGISTRY_GRAPH_URL` | [`utils/registry.ts`](./utils/registry.ts) — registry subgraph |
 | `NEXT_PUBLIC_PREDICT_POLYMARKET_URL` | [`constants/index.ts`](./constants/index.ts) — Polymarket subgraph |
 | `NEXT_PUBLIC_SKIP_LEGACY_ACHIEVEMENTS` | [`utils/achievements.ts`](./utils/achievements.ts) — feature flag |
@@ -183,7 +193,7 @@ Before adding a new direct dependency:
 - GitHub repo exists, is active, has reasonable star count and contributor history.
 - Maintainer is the expected one (check publish history: `npm view <pkg> time`).
 - No recently transferred ownership unless it's a known, announced transfer.
-- For Web3 / wallet libraries (`wagmi`, `viem`, `@wagmi/core`, etc.), additionally confirm the audit status on the project's site and check Socket.dev / Snyk advisories.
+- For Web3 libraries (currently just `viem`; do not re-add `wagmi` casually — see §5a's worked example 2), additionally confirm the audit status on the project's site and check Socket.dev / Snyk advisories.
 
 ## Response playbook: "a dependency we use was just disclosed as compromised"
 
@@ -212,7 +222,7 @@ Before adding a new direct dependency:
 - [x] **Node version pin.** [`.nvmrc`](./.nvmrc) records the exact Node version; CI reads it via `node-version-file:`. `engines.node` in [`package.json`](./package.json) is set to `20.x` so a mismatched Node major fails `yarn install` immediately (Yarn-1's `engine-strict` is default-on). See [§2](#2-single-lockfile-treated-as-source-of-truth).
 - [x] **`packageManager` sha512 hash.** Corepack now verifies the Yarn 1.22.22 binary against the pinned digest. See [§2](#2-single-lockfile-treated-as-source-of-truth).
 - [x] **CODEOWNERS.** [`.github/CODEOWNERS`](./.github/CODEOWNERS) routes supply-chain-sensitive paths (`.supply-chain/`, `scripts/audit*.mjs`, workflows, security docs, `package.json` / `yarn.lock`) to dedicated review owners. Enforcement requires branch protection's "Require review from Code Owners" toggle on `main`.
-- [ ] **Manually dismiss the Dependabot dashboard alerts for #116 (`@stablelib/ed25519`) and #61 (`elliptic`)** with `tolerable_risk` and a comment pointing at [§5b](#5b-tolerated-no-patch-advisories). These are the two remaining open alerts after the PR #49 resolutions cleanup; both have no upstream patch and are documented as tolerated risk in §5b. Re-evaluate by the dates listed there.
+- [x] ~~**Manually dismiss the Dependabot dashboard alerts for #116 (`@stablelib/ed25519`) and #61 (`elliptic`).**~~ No longer required — the wagmi → viem refactor (§5a worked example 2) removed both packages from the tree entirely. Both alerts close automatically.
 - [ ] **Automate the §4 cooldown rule.** Today the 7-day cooldown is enforced by manual reviewer discipline (check `npm view <pkg>@<ver> time` against the PR's `package.json` / `yarn.lock` diff). A small GitHub Action that diff-walks the lockfile and queries the npm registry for each newly-resolved version's publish time would catch a hot-published dep that slips past a reviewer. Sketch: parse `yarn.lock` from `base..HEAD`, extract the (name, version) tuples that are new or changed, hit `https://registry.npmjs.org/<name>` for each, fail the check if any `time[<version>]` is younger than 7 days unless the PR description includes a security-advisory ID.
 - [ ] **Add unit tests for [`scripts/audit.mjs`](./scripts/audit.mjs).** The script is load-bearing for every PR's audit gate. Fixture-driven tests would exercise the parsing path, the allowlist matching, the drift-detection warnings, the ID-coercion path, and the fail-closed-on-empty-output path. Mock yarn-audit JSON in, expected exit code and stdout/stderr out. Worth wiring into CI behind the existing `lockfile-lint` job.
 

@@ -9,11 +9,12 @@ export default withPlausibleProxy()({
   // default 60s timeout was insufficient on Windows during the Next 14
   // migration spike — cold local builds saw 26-28s per page and the
   // first-startup `_app` import via the wagmi/walletconnect tree pushed
-  // past 60s. The Linux CI baseline on Next 15 is ~5-6s per page (well
-  // within the default), so this knob primarily helps local Windows
-  // runs and provides headroom on cold-cache CI runs. Revisit if a
-  // future bump to this number is being considered to mask a real perf
-  // regression in `_app` import cost rather than worker startup.
+  // past 60s. wagmi has since been dropped (the app went viem-only —
+  // see `constants/viemConfig.ts` and SUPPLY-CHAIN-SECURITY.md §5a), so
+  // the original `_app` cost is gone. The Linux CI baseline on Next 15
+  // is ~5-6s per page (well within the default), so this knob now
+  // mostly provides headroom for cold-cache CI runs. Could probably
+  // be lowered to the default; left at 300 for now since it's harmless.
   staticPageGenerationTimeout: 300,
   compiler: {
     styledComponents: true,
