@@ -1,17 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
-import { readContract } from '@wagmi/core';
 import { Flex, Table, Typography } from 'antd';
 import { getMechAgents } from 'graphql/queries';
 import { MechAgent } from 'graphql/types';
 import Jazzicon, { jsNumberForAddress } from 'react-jazzicon';
 import styled from 'styled-components';
-import { UsePublicClientReturnType, usePublicClient } from 'wagmi';
 
 import { Card } from 'components/shared/styles';
 import { AGENT_REGISTRY_ABI, AGENT_REGISTRY_ADDRESS } from 'constants/contracts/agentRegistry';
 import { GNOSIS_SCAN_URL } from 'constants/index';
 import { COLOR } from 'constants/theme';
-import { wagmiConfig } from 'constants/wagmiConfig';
+import { publicClient } from 'constants/viemConfig';
 import { generateName } from 'utils/agents';
 import { getIpfsResponse } from 'utils/ipfs';
 
@@ -30,11 +28,11 @@ const LONG_HASHES_AGENT_ID = 6;
 // TODO: it's impossible to use multicall for all agents, because for some agents
 // the result is too long and the request fails. Ideally need to move it
 // to the subgraph; using this approach to save time
-async function fetchHashes(agents: MechAgent[], client: UsePublicClientReturnType) {
+async function fetchHashes(agents: MechAgent[]) {
   const hashesPromises = agents.map((agent) =>
     agent.agentId === `${LONG_HASHES_AGENT_ID}`
       ? Promise.resolve(null)
-      : readContract(wagmiConfig, {
+      : publicClient.readContract({
           address: AGENT_REGISTRY_ADDRESS,
           abi: AGENT_REGISTRY_ABI,
           functionName: 'getHashes',
@@ -53,35 +51,33 @@ async function fetchHashes(agents: MechAgent[], client: UsePublicClientReturnTyp
 
   let longAgentHash;
 
-  if (client) {
-    try {
-      const logs = await client.getLogs({
-        address: AGENT_REGISTRY_ADDRESS,
-        event: {
-          type: 'event',
-          name: 'UpdateAgentHash',
-          inputs: [
-            {
-              indexed: true,
-              name: 'agentId',
-              type: 'uint256',
-            },
-            {
-              indexed: false,
-              name: 'agentHash',
-              type: 'bytes32',
-            },
-          ],
-        },
-        args: { agentId: BigInt(LONG_HASHES_AGENT_ID) },
-        fromBlock: BigInt(35677064),
-        toBlock: 'latest',
-      });
+  try {
+    const logs = await publicClient.getLogs({
+      address: AGENT_REGISTRY_ADDRESS,
+      event: {
+        type: 'event',
+        name: 'UpdateAgentHash',
+        inputs: [
+          {
+            indexed: true,
+            name: 'agentId',
+            type: 'uint256',
+          },
+          {
+            indexed: false,
+            name: 'agentHash',
+            type: 'bytes32',
+          },
+        ],
+      },
+      args: { agentId: BigInt(LONG_HASHES_AGENT_ID) },
+      fromBlock: BigInt(35677064),
+      toBlock: 'latest',
+    });
 
-      longAgentHash = logs[logs.length - 1].args.agentHash;
-    } catch (e) {
-      console.error(e);
-    }
+    longAgentHash = logs[logs.length - 1].args.agentHash;
+  } catch (e) {
+    console.error(e);
   }
 
   if (longAgentHash) {
@@ -92,16 +88,13 @@ async function fetchHashes(agents: MechAgent[], client: UsePublicClientReturnTyp
 }
 
 export const MechAgents = () => {
-  const client = usePublicClient({ config: wagmiConfig });
-
   const { data, isLoading } = useQuery({
-    enabled: !!client,
     queryKey: ['getMechAgents'],
     queryFn: async () => {
       const data = await getMechAgents();
       if (data.createMeches.length === 0) return undefined;
       // get ipfs hashes for each agent
-      const hashes = await fetchHashes(data.createMeches, client);
+      const hashes = await fetchHashes(data.createMeches);
 
       // request data from ipfs to get the tools
       const ipfsPromises = hashes.map((item) =>
