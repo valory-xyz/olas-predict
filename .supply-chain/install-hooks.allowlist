@@ -10,7 +10,4 @@
 # changing a script in an already-listed package fails CI until
 # the allowlist is regenerated and the diff reviewed.
 
-bufferutil  # install: node-gyp-build
-keccak  # install: node-gyp-build || exit 0
 sharp  # install: node install/check.js || npm run build
-utf-8-validate  # install: node-gyp-build

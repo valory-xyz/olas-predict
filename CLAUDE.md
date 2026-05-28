@@ -11,7 +11,7 @@ Olas Predict is a Next.js-based prediction market application built for the Olas
 - React 18 with Ant Design (AntD) UI components
 - Styled Components for styling
 - TanStack Query (React Query) for data fetching
-- Wagmi v2 / viem configured for Gnosis Chain (read-only; no wallet connectors wired up — data comes from subgraphs, not on-chain reads)
+- Viem for read-only Gnosis Chain access (`publicClient.readContract` / `getLogs` only — no wallet connectors, no signing). Wagmi was removed; see `constants/viemConfig.ts` and `SUPPLY-CHAIN-SECURITY.md` §5a.
 - GraphQL (graphql-request) for subgraph queries
 - Vercel Blob for achievement OG-image lookups (SSR only)
 
@@ -125,9 +125,11 @@ All GraphQL types are auto-generated in `graphql/types.ts` (ignored by ESLint).
   - `useScreen`, `useDropdown` — UI helpers (AntD breakpoints, mobile menu state)
 - React Query DevTools available in development (bottom-left)
 
-**Wagmi** for blockchain state:
-- Configuration in `constants/wagmiConfig.ts` (Gnosis Chain transport only, no wallet connectors)
-- Currently **not used for any on-chain reads** — all data flows through subgraphs. The contract ABIs in `constants/contracts/` are present but unwired. Don't assume wagmi is on the data path when debugging.
+**Viem** for read-only blockchain access:
+- Configuration in `constants/viemConfig.ts` exports a single `publicClient` (Gnosis Chain transport).
+- The only PROD code path that actually reads on-chain is `components/MechAgents.tsx` (calls `publicClient.readContract` + `publicClient.getLogs` for mech agent hashes). Every other "data" hook in `hooks/` uses subgraphs via `graphql-request`.
+- **Wagmi was dropped** in favor of bare viem because the app has no wallet flow (no `useConnect`, no `useAccount`, no `writeContract`, no signing). Carrying the wagmi connector tree (`@wagmi/connectors`, `@walletconnect/*`, `@metamask/sdk`, `@coinbase/wallet-sdk`) added ~18 kB to the shared bundle, three native install hooks (`bufferutil`, `keccak`, `utf-8-validate`), and a long tail of Dependabot transitive-CVE alerts for code paths this app never invoked. See `SUPPLY-CHAIN-SECURITY.md` §5a for the migration rationale.
+- The contract ABIs in `constants/contracts/` are used by `MechAgents.tsx`; `serviceRegistry` is currently defined but unused.
 
 ### Utility Modules
 
@@ -239,7 +241,12 @@ This repo has a hardened dependency workflow — read `SUPPLY-CHAIN-SECURITY.md`
 
 - All direct **and** transitive deps are pinned to exact versions (no `^`/`~`). Transitive pins live in the `resolutions` block.
 - `yarn` is pinned to 1.22.22 via the `packageManager` field; CI uses `--frozen-lockfile`.
-- CI gates: `yarn lint:lockfile` (registry origins + integrity hashes) and `yarn audit:prod` (blocks high/critical advisories that aren't on the allowlist; suppressions live in `.supply-chain/audit-allowlist.json`).
+- CI gates that block merges (aggregated by `all-checks-passed`):
+  - `build` — `next build`
+  - `audit` — `yarn audit:prod` blocks high/critical advisories not in `.supply-chain/audit-allowlist.json` (schema: top-level `entries[]`)
+  - `lockfile-lint` — `yarn lint:lockfile` enforces registry origins + integrity hashes in `yarn.lock`
+  - `scan` — gitleaks v8.30.1 with SHA-256-verified binary download
+  - `install-hooks` — `scripts/audit-install-hooks.mjs` diffs the postinstall surface against `.supply-chain/install-hooks.allowlist` (1 entry: `sharp`)
 - New versions should wait ~7 days after release before being added (security advisories override this).
 - GitHub Actions are SHA-pinned in `.github/workflows/`.
 
@@ -250,5 +257,5 @@ This repo has a hardened dependency workflow — read `SUPPLY-CHAIN-SECURITY.md`
 - **Mobile layout**: Always test responsive behavior — actual breakpoints are `sm: 576px` and `xl: 1240px` (see `constants/theme.ts` / `MEDIA_QUERY`)
 - **IPFS content**: May be slow to load; implement loading states
 - **Gnosis Chain only**: Don't attempt multi-chain support without configuration changes
-- **Wagmi is not on the data path**: All reads go through subgraphs. Don't add on-chain reads without a clear reason — the wagmi config exists but is currently dormant.
+- **Read-only on-chain access via viem**: `MechAgents.tsx` is the only PROD file calling viem (`publicClient.readContract` + `publicClient.getLogs`). Wagmi was removed; do NOT add wagmi back when you need a new on-chain read — use the existing `publicClient` from `constants/viemConfig.ts`. Adding wagmi reintroduces the wallet-stack supply-chain surface and ~18 kB of bundle.
 - **Achievement pages bypass `Layout`**: They're SSR with their own full-screen card and depend on `BLOB_READ_WRITE_TOKEN` at runtime.

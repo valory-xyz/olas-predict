@@ -4,7 +4,6 @@ import PlausibleProvider from 'next-plausible';
 import { type AppProps } from 'next/app';
 import { useRouter } from 'next/router';
 import { useEffect } from 'react';
-import { WagmiProvider } from 'wagmi';
 
 import ErrorBoundary from 'components/ErrorBoundary';
 import { Layout } from 'components/Layout';
@@ -12,7 +11,6 @@ import { SEO } from 'components/SEO';
 import { AutonolasThemeProvider } from 'components/Theme';
 import { GlobalStyle } from 'components/Theme/GlobalStyle';
 import { OLAS_PREDICT_DOMAIN } from 'constants/index';
-import { wagmiConfig } from 'constants/wagmiConfig';
 
 const queryClient = new QueryClient();
 
@@ -91,12 +89,10 @@ const PredictApp = ({ Component, pageProps }: AppProps) => {
       <PageViewTracker />
 
       <AutonolasThemeProvider>
-        <WagmiProvider config={wagmiConfig}>
-          <QueryClientProvider client={queryClient}>
-            {isAchievementPage ? content : <Layout>{content}</Layout>}
-            <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-left" />
-          </QueryClientProvider>
-        </WagmiProvider>
+        <QueryClientProvider client={queryClient}>
+          {isAchievementPage ? content : <Layout>{content}</Layout>}
+          <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-left" />
+        </QueryClientProvider>
       </AutonolasThemeProvider>
     </PlausibleProvider>
   );
