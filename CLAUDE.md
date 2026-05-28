@@ -241,7 +241,12 @@ This repo has a hardened dependency workflow — read `SUPPLY-CHAIN-SECURITY.md`
 
 - All direct **and** transitive deps are pinned to exact versions (no `^`/`~`). Transitive pins live in the `resolutions` block.
 - `yarn` is pinned to 1.22.22 via the `packageManager` field; CI uses `--frozen-lockfile`.
-- CI gates: `yarn lint:lockfile` (registry origins + integrity hashes) and `yarn audit:prod` (blocks high/critical advisories that aren't on the allowlist; suppressions live in `.supply-chain/audit-allowlist.json`).
+- CI gates that block merges (aggregated by `all-checks-passed`):
+  - `build` — `next build`
+  - `audit` — `yarn audit:prod` blocks high/critical advisories not in `.supply-chain/audit-allowlist.json` (schema: top-level `entries[]`)
+  - `lockfile-lint` — `yarn lint:lockfile` enforces registry origins + integrity hashes in `yarn.lock`
+  - `scan` — gitleaks v8.30.1 with SHA-256-verified binary download
+  - `install-hooks` — `scripts/audit-install-hooks.mjs` diffs the postinstall surface against `.supply-chain/install-hooks.allowlist` (1 entry: `sharp`)
 - New versions should wait ~7 days after release before being added (security advisories override this).
 - GitHub Actions are SHA-pinned in `.github/workflows/`.
 

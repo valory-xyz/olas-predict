@@ -10,9 +10,10 @@ import { gnosis } from 'viem/chains';
  *   - There is no `useConnect` / `useAccount` flow anywhere in the app.
  *   - No `writeContract` calls, no transaction signing.
  *   - Carrying wagmi's connector tree (@wagmi/connectors, @walletconnect/*,
- *     @metamask/sdk, @coinbase/wallet-sdk) added ~1 MB to the bundle and a
- *     long tail of Dependabot transitive-CVE alerts for code paths this
- *     app never invokes.
+ *     @metamask/sdk, @coinbase/wallet-sdk) added ~18 kB to the shared bundle
+ *     (measured 309 → 291 kB), three native install hooks (bufferutil,
+ *     keccak, utf-8-validate — now gone), and a long tail of Dependabot
+ *     transitive-CVE alerts for code paths this app never invokes.
  *
  * See SUPPLY-CHAIN-SECURITY.md §5a for the migration rationale.
  */
