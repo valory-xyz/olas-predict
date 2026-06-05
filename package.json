@@ -8,6 +8,8 @@
     "audit:prod": "node scripts/audit.mjs",
     "audit:install-hooks": "node scripts/audit-install-hooks.mjs",
     "audit:install-hooks:update": "node scripts/audit-install-hooks.mjs --update",
+    "license-check": "node scripts/license-check.mjs",
+    "license-check:test": "node --test scripts/license-check.test.mjs",
     "analyze": "ANALYZE=true next build"
   },
   "dependencies": {
@@ -33,6 +35,7 @@
   },
   "devDependencies": {
     "@graphql-codegen/cli": "5.0.2",
+    "license-checker-rseidelsohn": "4.4.2",
     "@graphql-codegen/typescript": "4.0.9",
     "@graphql-codegen/typescript-graphql-request": "6.2.0",
     "@next/bundle-analyzer": "15.5.15",
