@@ -24,17 +24,16 @@
  * its own .supply-chain/license-allowlist.json). See README.md.
  */
 
-/* eslint-env node, es2021 */
-
-/* eslint-disable no-console -- CLI gate: it reports its findings on stdout/stderr */
+/* eslint-disable no-undef, no-console -- standalone Node CLI: uses Node/JS globals and reports on stdout/stderr (works across legacy + flat eslint configs) */
+// Static ESM import: license-checker-rseidelsohn is `type: module`, so a
+// `require()` of it throws ERR_REQUIRE_ESM on Node < 22 (Node 22 added
+// require(esm)). `import * as` works on every supported Node. `init` is a
+// named export.
+import * as checker from 'license-checker-rseidelsohn';
 import { existsSync, readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { relative, resolve } from 'node:path';
 
 import { evalExpr } from './license-check.lib.mjs';
-
-const require = createRequire(import.meta.url);
-const checker = require('license-checker-rseidelsohn');
 
 const ROOT = resolve('.');
 const ALLOWLIST_PATH = resolve(ROOT, '.supply-chain/license-allowlist.json');
@@ -42,14 +41,19 @@ const ALLOWLIST_PATH = resolve(ROOT, '.supply-chain/license-allowlist.json');
 // Bound the checker so a stuck node_modules walk (broken symlink loop,
 // filesystem hiccup) can't pin the CI job to the workflow-level timeout.
 const CHECKER_TIMEOUT_MS = 5 * 60 * 1000;
-const SELF_PKG = (() => {
+const ROOT_PKG = (() => {
   try {
-    const pkg = JSON.parse(readFileSync(resolve(ROOT, 'package.json'), 'utf8'));
-    return `${pkg.name}@${pkg.version}`;
+    return JSON.parse(readFileSync(resolve(ROOT, 'package.json'), 'utf8'));
   } catch {
-    return null;
+    return {};
   }
 })();
+const SELF_PKG = ROOT_PKG.name && ROOT_PKG.version ? `${ROOT_PKG.name}@${ROOT_PKG.version}` : null;
+// Direct production dependencies — used as a sanity floor: the production scan
+// MUST contain most of these. `license-checker`'s read-installed can silently
+// return a near-empty tree on some installs (transitive read-installed-packages
+// conflicts), which would otherwise make the gate pass vacuously (false green).
+const DIRECT_PROD_DEPS = Object.keys(ROOT_PKG.dependencies || {});
 
 function loadAllowlist() {
   if (!existsSync(ALLOWLIST_PATH)) {
@@ -130,6 +134,28 @@ checker.init(initOpts, (err, report) => {
       err.message || err,
     );
     process.exit(2);
+  }
+
+  // Scan-completeness guard (fail loud, never false-green): if the scan didn't
+  // even surface most of the repo's own direct production dependencies, the
+  // dependency-tree read is broken — do NOT report a pass.
+  const scannedNames = new Set(
+    Object.keys(report)
+      .filter((k) => k !== SELF_PKG)
+      .map((k) => (k.lastIndexOf('@') > 0 ? k.slice(0, k.lastIndexOf('@')) : k)),
+  );
+  if (DIRECT_PROD_DEPS.length > 0) {
+    const present = DIRECT_PROD_DEPS.filter((d) => scannedNames.has(d)).length;
+    if (present < Math.ceil(DIRECT_PROD_DEPS.length / 2)) {
+      console.error(
+        `::error::license-check: scan looks incomplete — only ${present}/${DIRECT_PROD_DEPS.length} ` +
+          `direct production dependencies were found in a scan of ${scannedNames.size} package(s). ` +
+          `The dependency tree could not be read reliably (often a transitive ` +
+          `read-installed-packages conflict). Refusing to report a pass. ` +
+          `Try a clean reinstall (rm -rf node_modules && yarn install).`,
+      );
+      process.exit(2);
+    }
   }
 
   const violations = [];
@@ -280,6 +306,8 @@ checker.init(initOpts, (err, report) => {
   }
 
   const acceptedSummary = `${overridden.length} overridden, ${exempted.length} exempted by name, ${prefixHits.size} prefix group(s)`;
-  console.log(`license-check: OK (${acceptedSummary}, 0 violations) — scope=${scope}.`);
+  console.log(
+    `license-check: OK (${scannedNames.size} pkgs scanned, ${acceptedSummary}, 0 violations) — scope=${scope}.`,
+  );
   process.exit(0);
 });

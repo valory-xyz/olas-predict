@@ -7,7 +7,7 @@
  * No I/O, no exit, no global state — same input → same output.
  */
 
-/* eslint-env es2021 */
+/* eslint-disable no-undef -- standalone module: uses JS built-in globals (works across legacy + flat eslint configs) */
 
 // Aliases for npm-ecosystem license strings that mean an SPDX identifier
 // but don't match it character-for-character. Lower-cased on both sides.

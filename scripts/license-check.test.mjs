@@ -13,7 +13,7 @@
  * the UNKNOWN/UNLICENSED/Custom early-exits.
  */
 
-/* eslint-env node, es2021 */
+/* eslint-disable no-undef -- standalone test module: uses JS built-in globals (works across legacy + flat eslint configs) */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
