@@ -25,9 +25,8 @@ const Tag = styled.div`
 
 const LONG_HASHES_AGENT_ID = 6;
 
-// TODO: it's impossible to use multicall for all agents, because for some agents
-// the result is too long and the request fails. Ideally need to move it
-// to the subgraph; using this approach to save time
+// TODO: use subgraph data for agent hashes and remove this onchain fallback.
+// Multicall is not reliable for all agents because some responses are too large.
 async function fetchHashes(agents: MechAgent[]) {
   const hashesPromises = agents.map((agent) =>
     agent.agentId === `${LONG_HASHES_AGENT_ID}`
