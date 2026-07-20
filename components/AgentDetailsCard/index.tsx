@@ -39,7 +39,9 @@ export const AgentDetailsCard = ({ agent }: AgentDetailsCardProps) => {
             {generateName(agent.id)}
           </Title>
           <Text type="secondary">Specialization</Text>
-          <Tag icon={<ChartSpline size={20} color={COLOR.PRIMARY} />}>Trader</Tag>
+          <Flex>
+            <Tag icon={<ChartSpline size={20} color={COLOR.PRIMARY} />}>Trader</Tag>
+          </Flex>
         </Flex>
         <Text type="secondary" className="ml-auto">
           {lastActivityTimestamp && `Last active ${getTimeAgo(lastActivityTimestamp * 1000)}`}

@@ -5035,11 +5035,14 @@ export type TraderAgent = {
   lastActive: string;
   totalBets: number;
   totalTraded: string;
+  totalTradedSettled: string;
   totalPayout: string;
+  totalExpectedPayout: string;
   blockNumber: string;
   blockTimestamp: string;
   transactionHash: string;
   totalFees: string;
+  totalFeesSettled: string;
   bets: {
     timestamp: number;
   }[];
@@ -5222,10 +5225,12 @@ export type GetMechSenderParams = {
 
 
 export type MechSender = {
-  totalRequests: number;
+  totalMarketplaceRequests: string;
   requests: {
     id: string;
-    questionTitle: string;
+    parsedRequest: {
+      questionTitle: string;
+    } | null;
   }[];
 };
 
