@@ -32,6 +32,7 @@ export const GlobalStyle = createGlobalStyle`
     align-items: center;
     gap: 6px;
     padding: 6px 10px;
+    border: 1px solid ${COLOR.WHITE_TRANSPARENT_10};
   }
 
   span.ant-typography {

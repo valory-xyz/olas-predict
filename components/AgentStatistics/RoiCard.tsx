@@ -48,7 +48,7 @@ export const RoiCard = ({ agent }: RoiCardProps) => {
   const roi = useMemo(() => {
     if (!mechSender || !mechSender.sender || !openMarkets || !stakingService || !olasInUsdPrice)
       return null;
-    const totalMechRequests = mechSender.sender.totalRequests;
+    const totalMechRequests = Number(mechSender.sender.totalMarketplaceRequests);
     const lastFourDaysRequests = mechSender.sender.requests;
     const openMarketTitles = openMarkets.questions.map((question) => {
       // An example of question: 'Will ... happen by Jul 2, 2025?␟\"Yes\",\"No\"␟weather␟en_US",
@@ -57,23 +57,23 @@ export const RoiCard = ({ agent }: RoiCardProps) => {
       return fields[0];
     });
 
-    // The Mech subgraph calculates totalRequests for all markets.
+    // totalMarketplaceRequests counts mech requests across all markets.
     // To calculate ROI correctly, we need to subtract the requests
     // made for markets that are still open.
     let requestsToSubtract = 0;
     lastFourDaysRequests.forEach((request) => {
-      if (openMarketTitles.find((title) => title === request.questionTitle)) {
+      if (openMarketTitles.find((title) => title === request.parsedRequest?.questionTitle)) {
         requestsToSubtract += 1;
       }
     });
 
     const totalCosts =
-      BigInt(agent.totalTraded) +
-      BigInt(agent.totalFees) +
+      BigInt(agent.totalTradedSettled) +
+      BigInt(agent.totalFeesSettled) +
       BigInt(totalMechRequests - requestsToSubtract) * DEFAULT_MECH_FEE;
 
     if (totalCosts === BigInt(0)) return null;
-    const totalMarketPayout = BigInt(agent.totalPayout);
+    const totalMarketPayout = BigInt(agent.totalExpectedPayout);
     const totalOlasRewardsPayoutInUsd =
       (BigInt(stakingService.service?.olasRewardsEarned || BigInt(0)) * olasInUsdPrice) /
       BigInt(1e18);
@@ -84,9 +84,9 @@ export const RoiCard = ({ agent }: RoiCardProps) => {
 
     return { partialRoi, finalRoi };
   }, [
-    agent.totalFees,
-    agent.totalPayout,
-    agent.totalTraded,
+    agent.totalFeesSettled,
+    agent.totalExpectedPayout,
+    agent.totalTradedSettled,
     mechSender,
     olasInUsdPrice,
     openMarkets,

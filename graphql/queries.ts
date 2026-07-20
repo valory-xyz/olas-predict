@@ -328,7 +328,7 @@ const getCreatorAgentsQuery = gql`
 
 const getMechAgentsQuery = gql`
   {
-    createMeches(first: 10, orderBy: agentId, order: ASC) {
+    createMeches(first: 10, orderBy: agentId, orderDirection: asc) {
       id
       mech
       agentId
@@ -345,8 +345,11 @@ const getTraderAgentQuery = gql`
       firstParticipation
       totalBets
       totalTraded
+      totalTradedSettled
       totalPayout
+      totalExpectedPayout
       totalFees
+      totalFeesSettled
       bets(first: 1, orderBy: timestamp, orderDirection: desc) {
         timestamp
       }
@@ -445,12 +448,14 @@ const getTraderAgentBetsQuery = gql`
 `;
 
 const getMechSenderQuery = gql`
-  query MechSender($id: ID!, $timestamp_gt: Int!) {
+  query MechSender($id: ID!, $timestamp_gt: BigInt!) {
     sender(id: $id) {
-      totalRequests
+      totalMarketplaceRequests
       requests(first: 1000, where: { blockTimestamp_gt: $timestamp_gt }) {
         id
-        questionTitle
+        parsedRequest {
+          questionTitle
+        }
       }
     }
   }
