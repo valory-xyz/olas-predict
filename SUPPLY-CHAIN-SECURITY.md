@@ -33,7 +33,7 @@ All direct dependencies in [`package.json`](./package.json) are pinned to **exac
 
 The `packageManager` field carries the Corepack-verified sha512 hash (`yarn@1.22.22+sha512:…`) so Corepack rejects any Yarn binary in the npm cache whose contents do not match the pinned digest. This closes the "what if a malicious yarn binary is in the local cache" gap. The hash is identical across the valory-xyz fleet (all repos pin the same Yarn 1.22.22 release) so a divergence in this field on any one repo is itself worth investigating in review.
 
-`engines.node` in [`package.json`](./package.json) is pinned to `20.x`. With Yarn-1's default `engine-strict` behavior, this fails `yarn install` immediately on a mismatched Node major instead of producing a working install that breaks at runtime. The exact Node version contributors should use is recorded in [`.nvmrc`](./.nvmrc); CI's `actions/setup-node` reads from the same file via `node-version-file:` so local-vs-CI parity is explicit.
+`engines.node` in [`package.json`](./package.json) is pinned to `22.x` (`.nvmrc` records the exact `22.22.3`). With Yarn-1's default `engine-strict` behavior, this fails `yarn install` immediately on a mismatched Node major instead of producing a working install that breaks at runtime. The exact Node version contributors should use is recorded in [`.nvmrc`](./.nvmrc); CI's `actions/setup-node` reads from the same file via `node-version-file:` so local-vs-CI parity is explicit.
 
 ### 3. Lockfile review in PRs
 
