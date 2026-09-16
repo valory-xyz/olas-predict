@@ -1,10 +1,8 @@
 type PolymarketBetMetadata = {
   title: string;
-  outcomes: string[];
 };
 
 type PolymarketBetQuestion = {
-  id: string;
   metadata: PolymarketBetMetadata | null;
 };
 
@@ -12,21 +10,22 @@ type PolymarketBettor = {
   id: string;
 };
 
+type PolymarketMarketParticipant = {
+  totalPayout: string;
+};
+
 export type PolymarketBet = {
   transactionHash: string;
   outcomeIndex: string;
   amount: string;
-  bettor: PolymarketBettor;
+  bettor: PolymarketBettor | null;
+  marketParticipant: PolymarketMarketParticipant | null;
   question: PolymarketBetQuestion | null;
 };
 
-export type PolymarketParticipantData = {
-  totalPayout: string;
-  bets: PolymarketBet[];
-};
-
+// The squid resolves a single entity by id via `betById`, which returns null when missing.
 export type PolymarketDataResponse = {
-  marketParticipants: PolymarketParticipantData[];
+  betById: PolymarketBet | null;
 };
 
 export type TransformedPolymarketBet = {
