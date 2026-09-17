@@ -33,7 +33,7 @@ All direct dependencies in [`package.json`](./package.json) are pinned to **exac
 
 The `packageManager` field carries the Corepack-verified sha512 hash (`yarn@1.22.22+sha512:…`) so Corepack rejects any Yarn binary in the npm cache whose contents do not match the pinned digest. This closes the "what if a malicious yarn binary is in the local cache" gap. The hash is identical across the valory-xyz fleet (all repos pin the same Yarn 1.22.22 release) so a divergence in this field on any one repo is itself worth investigating in review.
 
-`engines.node` in [`package.json`](./package.json) is pinned to `20.x`. With Yarn-1's default `engine-strict` behavior, this fails `yarn install` immediately on a mismatched Node major instead of producing a working install that breaks at runtime. The exact Node version contributors should use is recorded in [`.nvmrc`](./.nvmrc); CI's `actions/setup-node` reads from the same file via `node-version-file:` so local-vs-CI parity is explicit.
+`engines.node` in [`package.json`](./package.json) is pinned to `22.x` (`.nvmrc` records the exact `22.22.3`). With Yarn-1's default `engine-strict` behavior, this fails `yarn install` immediately on a mismatched Node major instead of producing a working install that breaks at runtime. The exact Node version contributors should use is recorded in [`.nvmrc`](./.nvmrc); CI's `actions/setup-node` reads from the same file via `node-version-file:` so local-vs-CI parity is explicit.
 
 ### 3. Lockfile review in PRs
 
@@ -173,7 +173,7 @@ Everything else read by the app is `NEXT_PUBLIC_*` configuration that Next.js in
 | `NEXT_PUBLIC_SUBGRAPH_API_KEY` | [`constants/index.ts`](./constants/index.ts) — keys for The Graph queries |
 | `NEXT_PUBLIC_GNOSIS_URL` | [`constants/viemConfig.ts`](./constants/viemConfig.ts) — Gnosis Chain RPC |
 | `NEXT_PUBLIC_REGISTRY_GRAPH_URL` | [`utils/registry.ts`](./utils/registry.ts) — registry subgraph |
-| `NEXT_PUBLIC_PREDICT_POLYMARKET_URL` | [`constants/index.ts`](./constants/index.ts) — Polymarket subgraph |
+| `NEXT_PUBLIC_PREDICT_POLYMARKET_SQUID_URL` | [`constants/index.ts`](./constants/index.ts) — Polymarket SQD squid |
 | `NEXT_PUBLIC_SKIP_LEGACY_ACHIEVEMENTS` | [`utils/achievements.ts`](./utils/achievements.ts) — feature flag |
 
 `NEXT_PUBLIC_*` values are visible to anyone who loads the site. **`NEXT_PUBLIC_SUBGRAPH_API_KEY` and `NEXT_PUBLIC_GNOSIS_URL` are sensitive even though they are public**: the subgraph API key is bundled and can be extracted from the JS, and the RPC URL typically embeds an API key in the URL. Treat them as low-rotation public configuration, but rotate them when an install-time compromise is suspected because a postinstall could exfiltrate them at build time before they ever hit the bundle. The remaining `NEXT_PUBLIC_*` URLs above are non-sensitive endpoint configuration.

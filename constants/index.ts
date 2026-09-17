@@ -61,7 +61,9 @@ export const OLAS_MECH_SUBGRAPH_URL =
   'https://api.subgraph.autonolas.tech/api/proxy/marketplace-gnosis';
 export const GNOSIS_STAKING_SUBGRAPH_URL =
   'https://gateway.thegraph.com/api/5c035877a4af18d178c96afe55ed41ae/subgraphs/id/F3iqL2iw5UTrP1qbb4S694pGEkBwzoxXp1TRikB2K4e';
-export const POLYMARKET_SUBGRAPH_URL = process.env.NEXT_PUBLIC_PREDICT_POLYMARKET_URL || '';
+// SQD squid, not a subgraph — queries use the OpenReader dialect
+// (`limit`/`offset`/`where: { field_op }`), and bet ids are `{txHash}_{logIndex}`.
+export const POLYMARKET_SQUID_URL = process.env.NEXT_PUBLIC_PREDICT_POLYMARKET_SQUID_URL || '';
 
 export const ARTICLE_SOURCE_BY_CREATOR: Record<string, string> = {
   '0x89c5cc945dd550bcffb72fe42bff002429f46fec': 'https://marketserver.autonolas.tech/market',

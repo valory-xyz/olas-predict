@@ -4,33 +4,37 @@ import { useMemo } from 'react';
 
 import { NA } from 'constants/index';
 import { TransformedPolymarketBet } from 'types/polymarket';
+import { toSquidBetId } from 'utils/polymarket';
 
 const USDC_DECIMALS = 6;
+// Positional, not read from the market metadata: the squid's `metadata.outcomes` is
+// ordered independently of the `outcomeIndex` on a bet (it commonly reads
+// `["No", "Yes"]`), so indexing into it mislabels the position. Index 0 is Yes.
 const OUTCOMES = ['Yes', 'No'];
 
 export const usePolystratBet = (betId: string) => {
+  const squidBetId = useMemo(() => toSquidBetId(betId), [betId]);
+
   const {
     data: polymarketData,
     isLoading,
     error,
   } = useQuery({
-    queryKey: ['getPolymarketData', betId],
-    queryFn: async () => await getPolymarketData({ id: betId }),
-    enabled: !!betId,
+    queryKey: ['getPolymarketData', squidBetId],
+    queryFn: async () => await getPolymarketData({ id: squidBetId as string }),
+    enabled: !!squidBetId,
   });
 
   const transformedData = useMemo((): TransformedPolymarketBet | null => {
-    const marketParticipant = polymarketData?.marketParticipants?.[0];
-    const bet = marketParticipant?.bets?.[0];
+    const bet = polymarketData?.betById;
 
-    if (!marketParticipant || !bet) return null;
+    if (!bet) return null;
 
-    const { question, amount, transactionHash, outcomeIndex } = bet ?? {};
-    const parsedOutcomeIndex = parseInt(outcomeIndex);
-    const position = OUTCOMES[parsedOutcomeIndex] || NA;
+    const { question, amount, transactionHash, outcomeIndex, marketParticipant } = bet;
+    const position = OUTCOMES[parseInt(outcomeIndex)] || NA;
 
     const betAmount = parseInt(amount) / Math.pow(10, USDC_DECIMALS);
-    const amountWon = parseInt(marketParticipant.totalPayout) / Math.pow(10, USDC_DECIMALS);
+    const amountWon = parseInt(marketParticipant?.totalPayout ?? '0') / Math.pow(10, USDC_DECIMALS);
 
     return {
       question: question?.metadata?.title || NA,
@@ -43,6 +47,10 @@ export const usePolystratBet = (betId: string) => {
       multiplier: amountWon > 0 ? (amountWon / betAmount).toFixed(2) : '0.00',
     };
   }, [polymarketData]);
+
+  // A bet id we cannot map onto the squid can never resolve — surface it as "no data"
+  // rather than leaving the card in a permanent loading state.
+  if (!squidBetId) return { data: null, isLoading: false, error: null };
 
   return { data: transformedData, isLoading, error };
 };

@@ -49,7 +49,7 @@ Copy `.env.example` to `.env.local` and configure:
 - `NEXT_PUBLIC_SUBGRAPH_API_KEY` - API key for The Graph subgraph access
 - `NEXT_PUBLIC_GNOSIS_URL` - RPC URL for Gnosis Chain (optional, falls back to default)
 - `NEXT_PUBLIC_REGISTRY_GRAPH_URL` - Olas registry subgraph (used by `utils/registry.ts` for the 7-day DAA banner)
-- `NEXT_PUBLIC_PREDICT_POLYMARKET_URL` - Polymarket subgraph (used by `usePolystratBet` on achievement pages)
+- `NEXT_PUBLIC_PREDICT_POLYMARKET_SQUID_URL` - Polymarket SQD squid (used by `usePolystratBet` on achievement pages)
 
 Runtime-only secrets (not in `.env.example`, configured in the Vercel dashboard):
 - `BLOB_READ_WRITE_TOKEN` - Vercel Blob read token used by `utils/achievements.ts` during SSR. Must stay runtime-only — never expose to the bundle.
@@ -80,7 +80,7 @@ The app queries multiple subgraphs (mostly Gnosis Chain):
 - **OMEN_THUMBNAIL_MAPPING_SUBGRAPH_URL**: Question thumbnail images
 - **XDAI_BLOCKS_SUBGRAPH_URL**: Maps timestamps to block numbers for the price-history chart
 - **Registry subgraph** (env: `NEXT_PUBLIC_REGISTRY_GRAPH_URL`): 7-day DAA averages for the `LiveAgentsBanner` (see `utils/registry.ts`)
-- **Polymarket subgraph** (env: `NEXT_PUBLIC_PREDICT_POLYMARKET_URL`): bet lookups for achievement pages (see `hooks/usePolystratBet.ts`)
+- **Polymarket SQD squid** (env: `NEXT_PUBLIC_PREDICT_POLYMARKET_SQUID_URL`): bet lookups for achievement pages (see `hooks/usePolystratBet.ts`). This is an SQD squid, **not** a subgraph — it speaks the OpenReader dialect (`limit`/`offset`, `where: { field_op: value }`, `orderBy: field_DIRECTION`, `xById(id:)` for single entities), and it has `squidStatus { height }` instead of `_meta`. The retired `predict-polymarket-agents` subgraph stopped indexing bets in June 2026
 
 All GraphQL types are auto-generated in `graphql/types.ts` (ignored by ESLint).
 
@@ -121,7 +121,7 @@ All GraphQL types are auto-generated in `graphql/types.ts` (ignored by ESLint).
   - `useOutcomeTokenMarginalPrices` — handles closed markets by falling back to the last liquidity event
   - `useAgentsBets` — per-outcome agent participation aggregated from trades
   - `useOlasInUsdPrice` — OLAS spot from CoinGecko
-  - `usePolystratBet` — Polymarket bet lookup for achievement pages
+  - `usePolystratBet` — Polymarket bet lookup for achievement pages (normalizes the incoming bet id with `utils/polymarket.ts`)
   - `useScreen`, `useDropdown` — UI helpers (AntD breakpoints, mobile menu state)
 - React Query DevTools available in development (bottom-left)
 
