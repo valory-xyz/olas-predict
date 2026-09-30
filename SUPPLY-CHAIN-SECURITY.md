@@ -173,7 +173,6 @@ Everything else read by the app is `NEXT_PUBLIC_*` configuration that Next.js in
 | `NEXT_PUBLIC_SUBGRAPH_API_KEY` | [`constants/index.ts`](./constants/index.ts) — keys for The Graph queries |
 | `NEXT_PUBLIC_GNOSIS_URL` | [`constants/viemConfig.ts`](./constants/viemConfig.ts) — Gnosis Chain RPC |
 | `NEXT_PUBLIC_REGISTRY_GRAPH_URL` | [`utils/registry.ts`](./utils/registry.ts) — registry subgraph |
-| `NEXT_PUBLIC_PREDICT_POLYMARKET_SQUID_URL` | [`constants/index.ts`](./constants/index.ts) — Polymarket SQD squid |
 | `NEXT_PUBLIC_SKIP_LEGACY_ACHIEVEMENTS` | [`utils/achievements.ts`](./utils/achievements.ts) — feature flag |
 
 `NEXT_PUBLIC_*` values are visible to anyone who loads the site. **`NEXT_PUBLIC_SUBGRAPH_API_KEY` and `NEXT_PUBLIC_GNOSIS_URL` are sensitive even though they are public**: the subgraph API key is bundled and can be extracted from the JS, and the RPC URL typically embeds an API key in the URL. Treat them as low-rotation public configuration, but rotate them when an install-time compromise is suspected because a postinstall could exfiltrate them at build time before they ever hit the bundle. The remaining `NEXT_PUBLIC_*` URLs above are non-sensitive endpoint configuration.

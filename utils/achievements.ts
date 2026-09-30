@@ -1,7 +1,8 @@
 import { list } from '@vercel/blob';
 
-import { ACHIEVEMENTS_LOOKUP_PREFIX, ACHIEVEMENT_TYPES } from 'constants/index';
+import { ACHIEVEMENTS_LOOKUP_PREFIX, ACHIEVEMENT_TYPES, PEARL_API_URL } from 'constants/index';
 import { SEO_CONFIG } from 'constants/seo';
+import { AchievementData } from 'types/achievement';
 
 type AchievementQuery = {
   betId?: string;
@@ -47,7 +48,36 @@ const getLegacyLookupFile = async (
 const SKIP_LEGACY = process.env.NEXT_PUBLIC_SKIP_LEGACY_ACHIEVEMENTS === 'true';
 
 // Only allow alphanumeric characters, hyphens, and underscores in entry IDs
-const VALID_ENTRY_ID = /^[\w-]+$/;
+export const VALID_ENTRY_ID = /^[\w-]+$/;
+
+const ACHIEVEMENT_DATA_TIMEOUT_MS = 8_000;
+
+type FetchAchievementDataParams = {
+  agent: string;
+  type: string;
+  betId: string;
+};
+
+/** Fetches the public card figures from pearl-api during server rendering. */
+export const fetchAchievementData = async ({
+  agent,
+  type,
+  betId,
+}: FetchAchievementDataParams): Promise<AchievementData | null> => {
+  if (!VALID_ENTRY_ID.test(betId)) return null;
+
+  const query = new URLSearchParams({ agent, type, id: betId });
+  const response = await fetch(`${PEARL_API_URL}/api/achievement/get-data?${query}`, {
+    signal: AbortSignal.timeout(ACHIEVEMENT_DATA_TIMEOUT_MS),
+  });
+
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    throw new Error(`pearl-api get-data returned ${response.status}`);
+  }
+
+  return (await response.json()) as AchievementData;
+};
 
 /**
  * Fetches a single achievement entry by its ID.

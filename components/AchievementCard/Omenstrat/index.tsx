@@ -5,15 +5,15 @@ import { AchievementData } from 'types/achievement';
 
 import { Payout } from './Payout';
 
-type PolystratAchievementCardProps = {
+type OmenstratAchievementCardProps = {
   achievementData: AchievementData | null;
   achievementDataError: boolean;
 };
 
-export const PolystratAchievementCard = ({
+export const OmenstratAchievementCard = ({
   achievementData,
   achievementDataError,
-}: PolystratAchievementCardProps) => {
+}: OmenstratAchievementCardProps) => {
   const router = useRouter();
   const { type } = router.query;
 

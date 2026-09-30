@@ -61,10 +61,6 @@ export const OLAS_MECH_SUBGRAPH_URL =
   'https://api.subgraph.autonolas.tech/api/proxy/marketplace-gnosis';
 export const GNOSIS_STAKING_SUBGRAPH_URL =
   'https://gateway.thegraph.com/api/5c035877a4af18d178c96afe55ed41ae/subgraphs/id/F3iqL2iw5UTrP1qbb4S694pGEkBwzoxXp1TRikB2K4e';
-// SQD squid, not a subgraph — queries use the OpenReader dialect
-// (`limit`/`offset`/`where: { field_op }`), and bet ids are `{txHash}_{logIndex}`.
-export const POLYMARKET_SQUID_URL = process.env.NEXT_PUBLIC_PREDICT_POLYMARKET_SQUID_URL || '';
-
 export const ARTICLE_SOURCE_BY_CREATOR: Record<string, string> = {
   '0x89c5cc945dd550bcffb72fe42bff002429f46fec': 'https://marketserver.autonolas.tech/market',
   '0xffc8029154ecd55abed15bd428ba596e7d23f557':
@@ -80,15 +76,18 @@ export const COINGECKO_OLAS_IN_USD_PRICE_URL =
 export const OLAS_ADDRESS = '0xce11e14225575945b8e6dc0d4f2dd4c570f79d9f';
 
 export const PEARL_WEBSITE_URL = 'https://pearl.you';
+export const PEARL_API_URL = 'https://pearl-api.olas.network';
+export const GNOSIS_BLOCKSCOUT_URL = 'https://gnosis.blockscout.com';
 
 export const OLAS_PREDICT_DOMAIN = 'predict.olas.network';
 
-export const getPearlPolystratUrlWithUTM = (achievementType: string) => {
+export const getPearlAgentUrlWithUTM = (agent: AgentType, achievementType: string) => {
   const params = new URLSearchParams({
     utm_source: OLAS_PREDICT_DOMAIN,
-    utm_content: `polystrat-${achievementType}`,
+    utm_content: `${agent}-${achievementType}`,
   });
-  return `${PEARL_WEBSITE_URL}/polystrat?${params.toString()}`;
+  const agentPath = agent === AGENTS.POLYSTRAT ? `/${AGENTS.POLYSTRAT}` : '';
+  return `${PEARL_WEBSITE_URL}${agentPath}?${params.toString()}`;
 };
 
 export const ACHIEVEMENTS_LOOKUP_PREFIX = 'achievements-lookup';
@@ -98,4 +97,5 @@ export const TIME_IN_SECONDS = {
   HALF_HOUR: 1800,
   ONE_HOUR: 3600,
   TWELVE_HOURS: 43200,
+  ONE_MINUTE: 60,
 };

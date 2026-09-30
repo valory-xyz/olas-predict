@@ -1,7 +1,7 @@
 import {
   ACHIEVEMENT_TYPES,
   AGENTS,
-  POLYGON_SCAN_URL,
+  GNOSIS_BLOCKSCOUT_URL,
   getPearlAgentUrlWithUTM,
 } from 'constants/index';
 import { AchievementData } from 'types/achievement';
@@ -17,12 +17,13 @@ export const Payout = ({ achievementData, achievementDataError }: PayoutProps) =
   <PayoutCard
     data={achievementData}
     error={achievementDataError}
-    agentName="Polystrat"
-    venueName="Polymarket"
-    explorerUrl={POLYGON_SCAN_URL}
-    pearlUrl={getPearlAgentUrlWithUTM(AGENTS.POLYSTRAT, ACHIEVEMENT_TYPES.PAYOUT)}
-    iconPath="/images/polystrat-icon.png"
-    iconAlt="Polystrat"
-    plausibleEventName="Get+Your+Polystrat+Agent"
+    agentName="Omenstrat"
+    venueName="Omen Markets"
+    explorerUrl={GNOSIS_BLOCKSCOUT_URL}
+    pearlUrl={getPearlAgentUrlWithUTM(AGENTS.OMENSTRAT, ACHIEVEMENT_TYPES.PAYOUT)}
+    iconPath="/images/omenstrat-icon.png"
+    iconAlt="Omenstrat"
+    plausibleEventName="Get+Your+Omenstrat+Agent"
+    showMarketImage
   />
 );
