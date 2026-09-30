@@ -6,8 +6,8 @@ import { PolystratAchievementCard } from './Polystrat';
 
 type AchievementCardProps = {
   agent?: string;
-  achievementData: AchievementData | null;
-  achievementDataError: boolean;
+  achievementData?: AchievementData | null;
+  achievementDataError?: boolean;
 };
 
 export const AchievementCard = ({
@@ -17,19 +17,13 @@ export const AchievementCard = ({
 }: AchievementCardProps) => {
   if (!agent) return null;
 
-  if (agent.toLowerCase() === AGENTS.POLYSTRAT)
-    return (
-      <PolystratAchievementCard
-        achievementData={achievementData}
-        achievementDataError={achievementDataError}
-      />
-    );
+  if (agent.toLowerCase() === AGENTS.POLYSTRAT) return <PolystratAchievementCard />;
 
   if (agent.toLowerCase() === AGENTS.OMENSTRAT)
     return (
       <OmenstratAchievementCard
-        achievementData={achievementData}
-        achievementDataError={achievementDataError}
+        achievementData={achievementData ?? null}
+        achievementDataError={achievementDataError ?? false}
       />
     );
 

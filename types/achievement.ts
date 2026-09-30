@@ -1,4 +1,4 @@
-/** Card figures returned by pearl-api for a settled prediction bet. */
+/** Shared card figures mapped from venue-specific prediction data. */
 export type AchievementData = {
   question: string;
   position: string;

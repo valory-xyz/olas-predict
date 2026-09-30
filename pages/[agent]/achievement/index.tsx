@@ -5,7 +5,7 @@ import Error from 'next/error';
 import { AchievementCard } from 'components/AchievementCard';
 import { ACHIEVEMENT_TYPES, AGENTS, AchievementType, TIME_IN_SECONDS } from 'constants/index';
 import type { AchievementData } from 'types/achievement';
-import { fetchAchievementData, fetchAchievementOgImage } from 'utils/achievements';
+import { fetchAchievementOgImage, fetchOmenAchievementData } from 'utils/achievements';
 
 type AchievementPageProps = {
   seoConfig: { title: string; ogImage: string; noIndex: boolean };
@@ -56,13 +56,11 @@ export const getServerSideProps: GetServerSideProps<AchievementPageProps> = asyn
   const [ogImage, achievementDataResult] = await Promise.all([
     fetchAchievementOgImage({ agent: agentSlug, type, query: context.query }),
     (async () => {
+      if (agentSlug !== AGENTS.OMENSTRAT) return { data: null, error: false };
+
       try {
         return {
-          data: await fetchAchievementData({
-            agent: agentSlug,
-            type,
-            betId: typeof betId === 'string' ? betId : '',
-          }),
+          data: await fetchOmenAchievementData(typeof betId === 'string' ? betId : ''),
           error: false,
         };
       } catch {
@@ -75,7 +73,7 @@ export const getServerSideProps: GetServerSideProps<AchievementPageProps> = asyn
 
   context.res.setHeader(
     'Cache-Control',
-    achievementData
+    achievementData || agentSlug === AGENTS.POLYSTRAT
       ? `public, s-maxage=${TIME_IN_SECONDS.TWELVE_HOURS}, stale-while-revalidate=${TIME_IN_SECONDS.ONE_HOUR}`
       : `public, s-maxage=${TIME_IN_SECONDS.ONE_MINUTE}`,
   );

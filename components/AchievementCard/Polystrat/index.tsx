@@ -1,26 +1,16 @@
 import { useRouter } from 'next/router';
 
 import { ACHIEVEMENT_TYPES } from 'constants/index';
-import { AchievementData } from 'types/achievement';
 
 import { Payout } from './Payout';
 
-type PolystratAchievementCardProps = {
-  achievementData: AchievementData | null;
-  achievementDataError: boolean;
-};
-
-export const PolystratAchievementCard = ({
-  achievementData,
-  achievementDataError,
-}: PolystratAchievementCardProps) => {
+export const PolystratAchievementCard = () => {
   const router = useRouter();
   const { type } = router.query;
 
   if (!router.isReady || !type) return null;
 
-  if (type === ACHIEVEMENT_TYPES.PAYOUT)
-    return <Payout achievementData={achievementData} achievementDataError={achievementDataError} />;
+  if (type === ACHIEVEMENT_TYPES.PAYOUT) return <Payout />;
 
   return null;
 };

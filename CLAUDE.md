@@ -49,6 +49,7 @@ Copy `.env.example` to `.env.local` and configure:
 - `NEXT_PUBLIC_SUBGRAPH_API_KEY` - API key for The Graph subgraph access
 - `NEXT_PUBLIC_GNOSIS_URL` - RPC URL for Gnosis Chain (optional, falls back to default)
 - `NEXT_PUBLIC_REGISTRY_GRAPH_URL` - Olas registry subgraph (used by `utils/registry.ts` for the 7-day DAA banner)
+- `NEXT_PUBLIC_PREDICT_POLYMARKET_SQUID_URL` - Polymarket SQD squid used by Polystrat achievement lookups
 
 Runtime-only secrets (not in `.env.example`, configured in the Vercel dashboard):
 - `BLOB_READ_WRITE_TOKEN` - Vercel Blob read token used by `utils/achievements.ts` during SSR. Must stay runtime-only — never expose to the bundle.
@@ -65,7 +66,7 @@ The app uses Next.js Pages Router. Top-level routes:
 Dynamic routes:
 - `/questions/[id]` - Individual market detail (param is the FPMM address, lowercased before query)
 - `/agents/[id]` - Individual trader agent detail (param is the agent address)
-- `/[agent]/achievement/...` - Server-rendered achievement / payout cards (e.g. `/polystrat/achievement/?betId=...&type=payout`). `getServerSideProps` validates the agent + type against enums (`AGENTS`, `ACHIEVEMENT_TYPES` in `constants/index.ts`), pulls the OG-image URL from Vercel Blob and card figures from pearl-api via `utils/achievements.ts`. Supports Polystrat and Omenstrat, and bypasses the main `Layout` wrapper.
+- `/[agent]/achievement/...` - Achievement / payout cards (e.g. `/polystrat/achievement/?betId=...&type=payout`). `getServerSideProps` validates the agent + type and gets the OG image from Vercel Blob. Polystrat figures come from the Polymarket SQD squid; Omenstrat figures come from the Omen trader subgraph and its market-thumbnail mapping. Supports both agents and bypasses the main `Layout` wrapper.
 
 ### Data Layer
 
@@ -79,6 +80,8 @@ The app queries multiple subgraphs (mostly Gnosis Chain):
 - **OMEN_THUMBNAIL_MAPPING_SUBGRAPH_URL**: Question thumbnail images
 - **XDAI_BLOCKS_SUBGRAPH_URL**: Maps timestamps to block numbers for the price-history chart
 - **Registry subgraph** (env: `NEXT_PUBLIC_REGISTRY_GRAPH_URL`): 7-day DAA averages for the `LiveAgentsBanner` (see `utils/registry.ts`)
+- **Polymarket SQD squid** (env: `NEXT_PUBLIC_PREDICT_POLYMARKET_SQUID_URL`): Polystrat achievement bet lookups via the OpenReader dialect (`usePolystratBet`)
+- **Omen trader subgraph** (`OLAS_AGENTS_SUBGRAPH_URL`): Omenstrat achievement bet and participant data; **OMEN_THUMBNAIL_MAPPING_SUBGRAPH_URL** provides optional market images
 
 All GraphQL types are auto-generated in `graphql/types.ts` (ignored by ESLint).
 
@@ -119,6 +122,7 @@ All GraphQL types are auto-generated in `graphql/types.ts` (ignored by ESLint).
   - `useOutcomeTokenMarginalPrices` — handles closed markets by falling back to the last liquidity event
   - `useAgentsBets` — per-outcome agent participation aggregated from trades
   - `useOlasInUsdPrice` — OLAS spot from CoinGecko
+  - `usePolystratBet` — Polystrat achievement lookup against the Polymarket SQD squid
   - `useScreen`, `useDropdown` — UI helpers (AntD breakpoints, mobile menu state)
 - React Query DevTools available in development (bottom-left)
 
@@ -153,7 +157,7 @@ All GraphQL types are auto-generated in `graphql/types.ts` (ignored by ESLint).
 
 **`utils/achievements.ts`**:
 - Vercel Blob lookup for per-bet achievement OG-image entries
-- Server-side pearl-api fetch for per-bet achievement figures, plus Vercel Blob lookup for the OG image
+- Omen trader-subgraph lookup and per-bet FIFO payout allocation for Omenstrat cards
 - Used in `getServerSideProps` of the `/[agent]/achievement` route
 - Has a legacy monolithic-file fallback gated by `NEXT_PUBLIC_SKIP_LEGACY_ACHIEVEMENTS`
 

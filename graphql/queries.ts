@@ -10,8 +10,10 @@ import {
   OLAS_MECH_SUBGRAPH_URL,
   OMEN_SUBGRAPH_URL,
   OMEN_THUMBNAIL_MAPPING_SUBGRAPH_URL,
+  POLYMARKET_SQUID_URL,
   XDAI_BLOCKS_SUBGRAPH_URL,
 } from 'constants/index';
+import { PolymarketDataResponse } from 'types/polymarket';
 
 import {
   AgentsGlobal,
@@ -477,6 +479,29 @@ const getStakingServiceQuery = gql`
   }
 `;
 
+// SQD squid (OpenReader dialect), not a subgraph. `id` is the squid bet id
+// (`{txHash}_{logIndex}`) — see `toSquidBetId` in utils/polymarket.ts.
+const getPolymarketDataQuery = gql`
+  query GetPolymarketData($id: String!) {
+    betById(id: $id) {
+      transactionHash
+      outcomeIndex
+      amount
+      bettor {
+        id
+      }
+      marketParticipant {
+        totalPayout
+      }
+      question {
+        metadata {
+          title
+        }
+      }
+    }
+  }
+`;
+
 export const getDailyPredictAgentsPerformancesQuery = gql`
   query DailyPredictPerformances($agentIds: [Int!]!, $timestamp_gt: Int!, $timestamp_lt: Int!) {
     dailyAgentPerformances(
@@ -601,3 +626,6 @@ export const getOpenMarkets = async (params: { timestamp_gt: number }) =>
 
 export const getStakingService = async (params: { id: string }) =>
   request<{ service: Service | null }>(GNOSIS_STAKING_SUBGRAPH_URL, getStakingServiceQuery, params);
+
+export const getPolymarketData = async (params: { id: string }) =>
+  request<PolymarketDataResponse>(POLYMARKET_SQUID_URL, getPolymarketDataQuery, params);
