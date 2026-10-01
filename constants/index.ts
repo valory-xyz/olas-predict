@@ -61,9 +61,9 @@ export const OLAS_MECH_SUBGRAPH_URL =
   'https://api.subgraph.autonolas.tech/api/proxy/marketplace-gnosis';
 export const GNOSIS_STAKING_SUBGRAPH_URL =
   'https://gateway.thegraph.com/api/5c035877a4af18d178c96afe55ed41ae/subgraphs/id/F3iqL2iw5UTrP1qbb4S694pGEkBwzoxXp1TRikB2K4e';
-// SQD's OpenReader endpoint is not a standard GraphQL subgraph: it uses fields such as
-// `limit`, and its bet ids are normalized in utils/polymarket.ts. The previous agents
-// subgraph stopped indexing Polymarket bets in June 2026.
+// SQD squid (OpenReader dialect), not a standard GraphQL subgraph. It uses {txHash}_{logIndex}
+// bet ids; see toSquidBetId in utils/polymarket.ts. The previous Polymarket agents subgraph
+// stopped indexing bets in June 2026.
 export const POLYMARKET_SQUID_URL = process.env.NEXT_PUBLIC_PREDICT_POLYMARKET_SQUID_URL || '';
 
 export const ARTICLE_SOURCE_BY_CREATOR: Record<string, string> = {

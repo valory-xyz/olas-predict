@@ -49,7 +49,7 @@ Copy `.env.example` to `.env.local` and configure:
 - `NEXT_PUBLIC_SUBGRAPH_API_KEY` - API key for The Graph subgraph access
 - `NEXT_PUBLIC_GNOSIS_URL` - RPC URL for Gnosis Chain (optional, falls back to default)
 - `NEXT_PUBLIC_REGISTRY_GRAPH_URL` - Olas registry subgraph (used by `utils/registry.ts` for the 7-day DAA banner)
-- `NEXT_PUBLIC_PREDICT_POLYMARKET_SQUID_URL` - Polymarket SQD squid used by Polystrat achievement lookups. It uses SQD's OpenReader GraphQL dialect; the previous Polymarket agents subgraph stopped indexing bets in June 2026. Bet id conversion lives in `utils/polymarket.ts`.
+- `NEXT_PUBLIC_PREDICT_POLYMARKET_SQUID_URL` - Polymarket SQD squid used by Polystrat achievement lookups. It uses SQD's OpenReader GraphQL dialect (`limit`/`offset`, `field_op`, `orderBy: field_DIRECTION`, `xById(id:)`, `squidStatus { height }`); the previous Polymarket agents subgraph stopped indexing bets in June 2026. Bet id conversion from `{txHash}{logIndex}` to `{txHash}_{logIndex}` lives in `utils/polymarket.ts`.
 
 Runtime-only secrets (not in `.env.example`, configured in the Vercel dashboard):
 - `BLOB_READ_WRITE_TOKEN` - Vercel Blob read token used by `utils/achievements.ts` during SSR. Must stay runtime-only — never expose to the bundle.
@@ -80,7 +80,7 @@ The app queries multiple subgraphs (mostly Gnosis Chain):
 - **OMEN_THUMBNAIL_MAPPING_SUBGRAPH_URL**: Question thumbnail images
 - **XDAI_BLOCKS_SUBGRAPH_URL**: Maps timestamps to block numbers for the price-history chart
 - **Registry subgraph** (env: `NEXT_PUBLIC_REGISTRY_GRAPH_URL`): 7-day DAA averages for the `LiveAgentsBanner` (see `utils/registry.ts`)
-- **Polymarket SQD squid** (env: `NEXT_PUBLIC_PREDICT_POLYMARKET_SQUID_URL`): Polystrat achievement bet lookups via the OpenReader dialect (`usePolystratBet`); use `limit` pagination and the id conversion in `utils/polymarket.ts`.
+- **Polymarket SQD squid** (env: `NEXT_PUBLIC_PREDICT_POLYMARKET_SQUID_URL`): Polystrat achievement bet lookups via the OpenReader dialect (`usePolystratBet`); use `limit`/`offset`, `field_op`, `orderBy: field_DIRECTION`, `xById(id:)`, and `squidStatus { height }`. Bet id normalization is in `utils/polymarket.ts`.
 - **Omen trader subgraph** (`OLAS_AGENTS_SUBGRAPH_URL`): Omenstrat achievement bet and participant data; achievement cards do not fetch market images
 
 All GraphQL types are auto-generated in `graphql/types.ts` (ignored by ESLint).

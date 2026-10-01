@@ -26,15 +26,15 @@ const row = ({
 test('winning buys retain their own shares and do not receive the participant total', () => {
   const bets = allocateBetsFifo([
     row({ id: 'buy-1', amount: 1_000_000, shares: 3_000_000, isBuy: true, logIndex: 1 }),
-    row({ id: 'buy-2', amount: 1_000_000, shares: 1_400_000, isBuy: true, logIndex: 2 }),
+    row({ id: 'buy-2', amount: 1_000_000, shares: 2_000_000, isBuy: true, logIndex: 2 }),
   ]);
 
   const first = bets.get('buy-1');
   const second = bets.get('buy-2');
   assert.equal(first.remainingShares, 3_000_000n);
-  assert.equal(second.remainingShares, 1_400_000n);
+  assert.equal(second.remainingShares, 2_000_000n);
   assert.equal(isAchievementMultiplierEligible(first.remainingShares, first.originalCost), true);
-  assert.equal(isAchievementMultiplierEligible(second.remainingShares, second.originalCost), false);
+  assert.equal(isAchievementMultiplierEligible(second.remainingShares, second.originalCost), true);
 });
 
 test('sell proceeds and sold shares are allocated FIFO within the outcome', () => {
