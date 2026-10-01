@@ -1,5 +1,4 @@
-import { ACHIEVEMENT_TYPES } from 'constants/index';
-import { AchievementType } from 'constants/index';
+import { ACHIEVEMENT_TYPES, AchievementType } from 'constants/index';
 import { AchievementData } from 'types/achievement';
 
 import { Payout } from './Payout';
