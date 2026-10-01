@@ -18,6 +18,7 @@ type AchievementPageProps = {
 const AchievementPage = ({
   agent,
   type,
+  betId,
   achievementData,
   achievementDataError,
 }: AchievementPageProps) => {

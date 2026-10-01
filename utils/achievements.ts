@@ -82,7 +82,7 @@ type OmenBetRow = {
   blockTimestamp: string;
 };
 
-const OMEN_SHARES_EPSILON = 10n ** 16n;
+const OMEN_SHARES_EPSILON = BigInt('10000000000000000');
 
 const omenBetQuery = gql`
   query AchievementOmenBet($id: ID!) {
@@ -177,7 +177,7 @@ const fetchOmenAchievementData = async (betId: string): Promise<AchievementData 
     : 0;
   if (
     !marketParticipant?.settled ||
-    BigInt(marketParticipant.totalPayout || '0') <= 0n ||
+    BigInt(marketParticipant.totalPayout || '0') <= BigInt(0) ||
     !omenMarket ||
     omenMarket.isPendingArbitration ||
     !finalizedAt ||
@@ -195,11 +195,11 @@ const fetchOmenAchievementData = async (betId: string): Promise<AchievementData 
       blockNumber: BigInt(row.blockNumber),
       blockTimestamp: BigInt(row.blockTimestamp),
       logIndex: getOmenLogIndex(row.id),
-      isBuy: BigInt(row.amount) > 0n,
+      isBuy: BigInt(row.amount) > BigInt(0),
     })),
   );
   const target = allocatedBets.get(betId.toLowerCase());
-  if (!target || target.originalCost <= 0n) return null;
+  if (!target || target.originalCost <= BigInt(0)) return null;
 
   const answer = omenMarket.currentAnswer ? BigInt(omenMarket.currentAnswer) : null;
   if (answer === null || answer > BigInt(1) || Number(target.outcomeIndex) !== Number(answer)) {

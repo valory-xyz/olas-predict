@@ -12,7 +12,7 @@ const USDC_DECIMALS = 6;
 // ordered independently of the `outcomeIndex` on a bet (it commonly reads
 // `["No", "Yes"]`), so indexing into it mislabels the position. Index 0 is Yes.
 const OUTCOMES = ['Yes', 'No'];
-const FULLY_SOLD_EPSILON = 10_000n;
+const FULLY_SOLD_EPSILON = BigInt(10_000);
 
 const getSquidLogIndex = (id: string): number => {
   const suffix = id.slice(id.lastIndexOf('_') + 1);
@@ -62,7 +62,8 @@ export const usePolystratBet = (betId: string) => {
     const fullySoldProfit = target.remainingShares <= FULLY_SOLD_EPSILON;
     if (!fullySoldProfit && Number(winningIndex) !== Number(outcomeIndex)) return null;
 
-    const amountWonRaw = target.allocatedProceeds + (fullySoldProfit ? 0n : target.remainingShares);
+    const amountWonRaw =
+      target.allocatedProceeds + (fullySoldProfit ? BigInt(0) : target.remainingShares);
     if (!isAchievementMultiplierEligible(amountWonRaw, betAmountRaw)) return null;
     const amountWon = Number(amountWonRaw) / 10 ** USDC_DECIMALS;
 

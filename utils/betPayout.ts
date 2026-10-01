@@ -19,8 +19,8 @@ export type FifoBuy = FifoBetRow & {
 };
 
 // Keep the strict multiplier threshold aligned with the agents' achievement checkers.
-const MIN_ACHIEVEMENT_MULTIPLIER_NUMERATOR = 3n;
-const MIN_ACHIEVEMENT_MULTIPLIER_DENOMINATOR = 2n;
+const MIN_ACHIEVEMENT_MULTIPLIER_NUMERATOR = BigInt(3);
+const MIN_ACHIEVEMENT_MULTIPLIER_DENOMINATOR = BigInt(2);
 
 export const allocateBetsFifo = (rows: FifoBetRow[]): Map<string, FifoBuy> => {
   const sortedRows = [...rows].sort((a, b) => {
@@ -36,24 +36,24 @@ export const allocateBetsFifo = (rows: FifoBetRow[]): Map<string, FifoBuy> => {
     queues.set(row.outcomeIndex, queue);
 
     if (row.isBuy) {
-      if (row.amount <= 0n || row.shares <= 0n) continue;
+      if (row.amount <= BigInt(0) || row.shares <= BigInt(0)) continue;
       const buy: FifoBuy = {
         ...row,
         originalCost: row.amount,
         originalShares: row.shares,
         remainingShares: row.shares,
-        allocatedCost: 0n,
-        allocatedProceeds: 0n,
+        allocatedCost: BigInt(0),
+        allocatedProceeds: BigInt(0),
       };
       buys.set(row.id, buy);
       queue.push(buy);
       continue;
     }
 
-    const sharesSold = row.shares < 0n ? -row.shares : row.shares;
-    if (row.amount >= 0n || sharesSold <= 0n) continue;
+    const sharesSold = row.shares < BigInt(0) ? -row.shares : row.shares;
+    if (row.amount >= BigInt(0) || sharesSold <= BigInt(0)) continue;
     let remainingToAllocate = sharesSold;
-    while (remainingToAllocate > 0n && queue.length > 0) {
+    while (remainingToAllocate > BigInt(0) && queue.length > 0) {
       const buy = queue[0];
       const taken =
         remainingToAllocate < buy.remainingShares ? remainingToAllocate : buy.remainingShares;
@@ -61,7 +61,7 @@ export const allocateBetsFifo = (rows: FifoBetRow[]): Map<string, FifoBuy> => {
       buy.allocatedCost += (buy.originalCost * taken) / buy.originalShares;
       buy.remainingShares -= taken;
       remainingToAllocate -= taken;
-      if (buy.remainingShares <= 0n) queue.shift();
+      if (buy.remainingShares <= BigInt(0)) queue.shift();
     }
   }
 
@@ -69,5 +69,5 @@ export const allocateBetsFifo = (rows: FifoBetRow[]): Map<string, FifoBuy> => {
 };
 
 export const isAchievementMultiplierEligible = (amountWon: bigint, cost: bigint): boolean =>
-  cost > 0n &&
+  cost > BigInt(0) &&
   amountWon * MIN_ACHIEVEMENT_MULTIPLIER_DENOMINATOR > cost * MIN_ACHIEVEMENT_MULTIPLIER_NUMERATOR;
