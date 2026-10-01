@@ -240,7 +240,8 @@ const fetchOmenAchievementData = async (betId: string): Promise<AchievementData 
   if (
     amountWonWei === null ||
     !isAchievementMultiplierEligible(amountWonWei, target.originalCost, 18)
-  ) return null;
+  )
+    return null;
 
   const betAmount = formatXdai(target.originalCost);
   const amountWon = formatXdai(amountWonWei);

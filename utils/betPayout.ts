@@ -32,7 +32,8 @@ const roundToMilliUnits = (value: bigint, decimals: number): bigint => {
   const quotient = value / divisor;
   const remainder = value % divisor;
   const twiceRemainder = remainder * BigInt(2);
-  return twiceRemainder > divisor || (twiceRemainder === divisor && quotient % BigInt(2) !== BigInt(0))
+  return twiceRemainder > divisor ||
+    (twiceRemainder === divisor && quotient % BigInt(2) !== BigInt(0))
     ? quotient + BigInt(1)
     : quotient;
 };
