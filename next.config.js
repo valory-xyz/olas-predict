@@ -68,12 +68,6 @@ export default withPlausibleProxy()({
         port: '',
         pathname: '/ipfs/**',
       },
-      {
-        protocol: 'https',
-        hostname: 'gateway.autonolas.tech',
-        port: '',
-        pathname: '/ipfs/**',
-      },
     ],
   },
 });

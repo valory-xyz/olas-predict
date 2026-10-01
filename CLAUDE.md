@@ -66,7 +66,7 @@ The app uses Next.js Pages Router. Top-level routes:
 Dynamic routes:
 - `/questions/[id]` - Individual market detail (param is the FPMM address, lowercased before query)
 - `/agents/[id]` - Individual trader agent detail (param is the agent address)
-- `/[agent]/achievement/...` - Achievement / payout cards (e.g. `/polystrat/achievement/?betId=...&type=payout`). `getServerSideProps` validates the agent + type and gets the OG image from Vercel Blob. Polystrat figures come from the Polymarket SQD squid; Omenstrat figures come from the Omen trader subgraph and its market-thumbnail mapping. Supports both agents and bypasses the main `Layout` wrapper.
+- `/[agent]/achievement/...` - Achievement / payout cards (e.g. `/polystrat/achievement/?betId=...&type=payout`). `getServerSideProps` validates the agent + type and gets the OG image from Vercel Blob. Polystrat figures come from the Polymarket SQD squid; Omenstrat figures come from the Omen trader and market subgraphs. Achievement cards do not fetch market thumbnails. Supports both agents and bypasses the main `Layout` wrapper.
 
 ### Data Layer
 
@@ -81,7 +81,7 @@ The app queries multiple subgraphs (mostly Gnosis Chain):
 - **XDAI_BLOCKS_SUBGRAPH_URL**: Maps timestamps to block numbers for the price-history chart
 - **Registry subgraph** (env: `NEXT_PUBLIC_REGISTRY_GRAPH_URL`): 7-day DAA averages for the `LiveAgentsBanner` (see `utils/registry.ts`)
 - **Polymarket SQD squid** (env: `NEXT_PUBLIC_PREDICT_POLYMARKET_SQUID_URL`): Polystrat achievement bet lookups via the OpenReader dialect (`usePolystratBet`)
-- **Omen trader subgraph** (`OLAS_AGENTS_SUBGRAPH_URL`): Omenstrat achievement bet and participant data; **OMEN_THUMBNAIL_MAPPING_SUBGRAPH_URL** provides optional market images
+- **Omen trader subgraph** (`OLAS_AGENTS_SUBGRAPH_URL`): Omenstrat achievement bet and participant data; achievement cards do not fetch market images
 
 All GraphQL types are auto-generated in `graphql/types.ts` (ignored by ESLint).
 

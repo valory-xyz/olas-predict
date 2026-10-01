@@ -24,6 +24,5 @@ export const Payout = ({ achievementData, achievementDataError }: PayoutProps) =
     iconPath="/images/omenstrat-icon.png"
     iconAlt="Omenstrat"
     plausibleEventName="Get+Your+Omenstrat+Agent"
-    showMarketImage
   />
 );

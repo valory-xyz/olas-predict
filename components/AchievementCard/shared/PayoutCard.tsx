@@ -122,7 +122,6 @@ type PayoutCardProps = {
   iconPath: string;
   iconAlt: string;
   plausibleEventName: string;
-  showMarketImage?: boolean;
 };
 
 export const PayoutCard = ({
@@ -135,7 +134,6 @@ export const PayoutCard = ({
   iconPath,
   iconAlt,
   plausibleEventName,
-  showMarketImage = false,
 }: PayoutCardProps) => {
   if (!data) {
     return (
@@ -186,15 +184,6 @@ export const PayoutCard = ({
 
         <MarketCard styles={{ body: { padding: 0 } }}>
           <Flex align="center" gap={12} style={{ padding: 20 }}>
-            {showMarketImage && data.marketImageUrl && (
-              <Image
-                src={data.marketImageUrl}
-                width={48}
-                height={48}
-                alt="Market icon"
-                style={{ borderRadius: 10, objectFit: 'cover', flexShrink: 0 }}
-              />
-            )}
             <Text
               style={{
                 display: 'block',

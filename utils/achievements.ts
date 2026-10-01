@@ -1,17 +1,14 @@
 import { list } from '@vercel/blob';
 import { gql, request } from 'graphql-request';
-import { getMarketThumbnail } from 'graphql/queries';
 
 import {
   ACHIEVEMENTS_LOOKUP_PREFIX,
   ACHIEVEMENT_TYPES,
-  IPFS_GATEWAY_URL,
   OLAS_AGENTS_SUBGRAPH_URL,
   OMEN_SUBGRAPH_URL,
 } from 'constants/index';
 import { SEO_CONFIG } from 'constants/seo';
 import { AchievementData } from 'types/achievement';
-import { byte32ToIPFSCIDV0 } from 'utils/ipfs';
 
 type AchievementQuery = {
   betId?: string;
@@ -246,15 +243,6 @@ export const fetchOmenAchievementData = async (betId: string): Promise<Achieveme
     amountWonWei += (totalPayout * remainingCost) / winningCost;
   }
 
-  let marketImageUrl: string | null = null;
-  try {
-    const thumbnail = await getMarketThumbnail({ id: market.id });
-    const imageHash = thumbnail.omenThumbnailMapping?.image_hash;
-    if (imageHash) marketImageUrl = `${IPFS_GATEWAY_URL}${byte32ToIPFSCIDV0(imageHash.slice(2))}`;
-  } catch {
-    // Market images are optional; the market and payout data still render without one.
-  }
-
   const betAmount = formatXdai(target.originalCost);
   const amountWon = formatXdai(amountWonWei);
   if (amountWonWei * BigInt(2) <= target.originalCost * BigInt(3)) return null;
@@ -269,7 +257,6 @@ export const fetchOmenAchievementData = async (betId: string): Promise<Achieveme
     betAmountFormatted: `$${betAmount.toFixed(2)}`,
     amountWonFormatted: `$${amountWon.toFixed(2)}`,
     multiplier: betAmount > 0 ? (amountWon / betAmount).toFixed(2) : '0.00',
-    marketImageUrl,
   };
 };
 

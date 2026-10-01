@@ -8,5 +8,4 @@ export type AchievementData = {
   betAmountFormatted: string;
   amountWonFormatted: string;
   multiplier: string;
-  marketImageUrl: string | null;
 };
