@@ -1,5 +1,5 @@
 import { list } from '@vercel/blob';
-import { gql, GraphQLClient } from 'graphql-request';
+import { GraphQLClient, gql } from 'graphql-request';
 
 import {
   ACHIEVEMENTS_LOOKUP_PREFIX,

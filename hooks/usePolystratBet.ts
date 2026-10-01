@@ -4,8 +4,8 @@ import { useMemo } from 'react';
 
 import { NA } from 'constants/index';
 import { TransformedPolymarketBet } from 'types/polymarket';
-import { toSquidBetId } from 'utils/polymarket';
 import { allocateBetsFifo, isAchievementMultiplierEligible } from 'utils/betPayout';
+import { toSquidBetId } from 'utils/polymarket';
 
 const USDC_DECIMALS = 6;
 // Positional, not read from the market metadata: the squid's `metadata.outcomes` is
