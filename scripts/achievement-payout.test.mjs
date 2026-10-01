@@ -60,3 +60,15 @@ test('same-block events follow log index, and the 1.5x cutoff is strict', () => 
   assert.equal(isAchievementMultiplierEligible(150n, 100n), false);
   assert.equal(isAchievementMultiplierEligible(151n, 100n), true);
 });
+
+test('a fully sold profitable Omen buy qualifies on realized proceeds', () => {
+  const bets = allocateBetsFifo([
+    row({ id: 'buy', amount: 1_000, shares: 1_000, isBuy: true, logIndex: 1 }),
+    row({ id: 'sell', amount: -1_600, shares: -1_000, isBuy: false, logIndex: 2 }),
+  ]);
+  const buy = bets.get('buy');
+
+  assert.equal(buy.remainingShares, 0n);
+  assert.equal(buy.allocatedProceeds, 1_600n);
+  assert.equal(isAchievementMultiplierEligible(buy.allocatedProceeds, buy.originalCost), true);
+});

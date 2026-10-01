@@ -110,6 +110,7 @@ const omenMarketSettlementQuery = gql`
   query AchievementOmenMarketSettlement($id: ID!) {
     fixedProductMarketMaker(id: $id) {
       currentAnswer
+      currentAnswerTimestamp
       answerFinalizedTimestamp
       isPendingArbitration
     }
@@ -162,11 +163,16 @@ const fetchOmenAchievementData = async (betId: string): Promise<AchievementData 
   const participantId = `${bet.bettor.id}_${market.id}`.toLowerCase();
   const [{ marketParticipant }, { fixedProductMarketMaker: omenMarket }] = await Promise.all([
     agentsSubgraph.client.request<{
-      marketParticipant: { settled: boolean; totalPayout: string; bets: OmenBetRow[] } | null;
+      marketParticipant: {
+        settled: boolean;
+        totalPayout: string | null;
+        bets: OmenBetRow[];
+      } | null;
     }>(omenParticipantQuery, { id: participantId }),
     omenSubgraph.client.request<{
       fixedProductMarketMaker: {
         currentAnswer: string | null;
+        currentAnswerTimestamp: string | null;
         answerFinalizedTimestamp: string | null;
         isPendingArbitration: boolean;
       } | null;
@@ -175,16 +181,7 @@ const fetchOmenAchievementData = async (betId: string): Promise<AchievementData 
   const finalizedAt = omenMarket?.answerFinalizedTimestamp
     ? Number(omenMarket.answerFinalizedTimestamp)
     : 0;
-  if (
-    !marketParticipant?.settled ||
-    BigInt(marketParticipant.totalPayout || '0') <= BigInt(0) ||
-    !omenMarket ||
-    omenMarket.isPendingArbitration ||
-    !finalizedAt ||
-    finalizedAt > Math.floor(Date.now() / 1000)
-  ) {
-    return null;
-  }
+  if (!marketParticipant || !omenMarket) return null;
 
   const allocatedBets = allocateBetsFifo(
     marketParticipant.bets.map((row) => ({
@@ -201,14 +198,29 @@ const fetchOmenAchievementData = async (betId: string): Promise<AchievementData 
   const target = allocatedBets.get(betId.toLowerCase());
   if (!target || target.originalCost <= BigInt(0)) return null;
 
-  const answer = omenMarket.currentAnswer ? BigInt(omenMarket.currentAnswer) : null;
-  if (answer === null || answer > BigInt(1) || Number(target.outcomeIndex) !== Number(answer)) {
-    return null;
-  }
-
-  if (target.remainingShares <= OMEN_SHARES_EPSILON) return null;
+  const fullySold = target.remainingShares <= OMEN_SHARES_EPSILON;
   let amountWonWei = target.allocatedProceeds;
-  amountWonWei += target.remainingShares;
+  if (fullySold) {
+    // Match the trader: fully exited profitable buys settle from realized proceeds,
+    // independent of the market outcome. The achievement checker requires settled_at,
+    // which is populated when Omen has a currentAnswerTimestamp.
+    if (!omenMarket.currentAnswerTimestamp) return null;
+  } else {
+    const answer = omenMarket.currentAnswer ? BigInt(omenMarket.currentAnswer) : null;
+    if (
+      !marketParticipant.settled ||
+      BigInt(marketParticipant.totalPayout || '0') <= BigInt(0) ||
+      omenMarket.isPendingArbitration ||
+      !finalizedAt ||
+      finalizedAt > Math.floor(Date.now() / 1000) ||
+      answer === null ||
+      answer > BigInt(1) ||
+      Number(target.outcomeIndex) !== Number(answer)
+    ) {
+      return null;
+    }
+    amountWonWei += target.remainingShares;
+  }
   if (!isAchievementMultiplierEligible(amountWonWei, target.originalCost)) return null;
 
   const betAmount = formatXdai(target.originalCost);
