@@ -18,9 +18,24 @@ export type FifoBuy = FifoBetRow & {
   allocatedProceeds: bigint;
 };
 
-// Keep the strict multiplier threshold aligned with the agents' achievement checkers.
-const MIN_ACHIEVEMENT_MULTIPLIER_NUMERATOR = BigInt(3);
-const MIN_ACHIEVEMENT_MULTIPLIER_DENOMINATOR = BigInt(2);
+// Trader persists bet_amount and total_payout rounded to three decimals, then
+// applies a strict >1.5 threshold to those persisted values. Mirror that here.
+const pow10 = (exponent: number): bigint => {
+  let value = BigInt(1);
+  for (let i = 0; i < exponent; i += 1) value *= BigInt(10);
+  return value;
+};
+
+const roundToMilliUnits = (value: bigint, decimals: number): bigint => {
+  if (decimals < 3) return value * pow10(3 - decimals);
+  const divisor = pow10(decimals - 3);
+  const quotient = value / divisor;
+  const remainder = value % divisor;
+  const twiceRemainder = remainder * BigInt(2);
+  return twiceRemainder > divisor || (twiceRemainder === divisor && quotient % BigInt(2) !== BigInt(0))
+    ? quotient + BigInt(1)
+    : quotient;
+};
 
 export const allocateBetsFifo = (rows: FifoBetRow[]): Map<string, FifoBuy> => {
   const sortedRows = [...rows].sort((a, b) => {
@@ -68,6 +83,35 @@ export const allocateBetsFifo = (rows: FifoBetRow[]): Map<string, FifoBuy> => {
   return buys;
 };
 
-export const isAchievementMultiplierEligible = (amountWon: bigint, cost: bigint): boolean =>
-  cost > BigInt(0) &&
-  amountWon * MIN_ACHIEVEMENT_MULTIPLIER_DENOMINATOR > cost * MIN_ACHIEVEMENT_MULTIPLIER_NUMERATOR;
+export const isAchievementMultiplierEligible = (
+  amountWon: bigint,
+  cost: bigint,
+  decimals = 0,
+): boolean => {
+  const roundedWon = roundToMilliUnits(amountWon, decimals);
+  const roundedCost = roundToMilliUnits(cost, decimals);
+  return roundedCost > BigInt(0) && roundedWon * BigInt(2) > roundedCost * BigInt(3);
+};
+
+/** Trader's Omen payout: sell proceeds plus remaining cost's share of winnings. */
+export const getOmenBuyPayout = (
+  buys: Map<string, FifoBuy>,
+  buyId: string,
+  totalPayout: bigint,
+  winningIndex: number,
+  fullySold: boolean,
+): bigint | null => {
+  const buy = buys.get(buyId);
+  if (!buy) return null;
+  if (fullySold) return buy.allocatedProceeds > buy.allocatedCost ? buy.allocatedProceeds : null;
+  if (buy.outcomeIndex !== winningIndex || totalPayout <= BigInt(0)) return null;
+  const winningCost = [...buys.values()]
+    .filter((item) => item.outcomeIndex === winningIndex)
+    .reduce((sum, item) => {
+      const cost = item.originalCost - item.allocatedCost;
+      return sum + (cost > BigInt(0) ? cost : BigInt(0));
+    }, BigInt(0));
+  if (winningCost <= BigInt(0)) return null;
+  const remainingCost = buy.originalCost - buy.allocatedCost;
+  return buy.allocatedProceeds + (totalPayout * remainingCost) / winningCost;
+};

@@ -64,7 +64,7 @@ export const usePolystratBet = (betId: string) => {
 
     const amountWonRaw =
       target.allocatedProceeds + (fullySoldProfit ? BigInt(0) : target.remainingShares);
-    if (!isAchievementMultiplierEligible(amountWonRaw, betAmountRaw)) return null;
+    if (!isAchievementMultiplierEligible(amountWonRaw, betAmountRaw, 6)) return null;
     const amountWon = Number(amountWonRaw) / 10 ** USDC_DECIMALS;
 
     return {

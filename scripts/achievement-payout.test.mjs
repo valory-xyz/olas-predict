@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { allocateBetsFifo, isAchievementMultiplierEligible } from '../utils/betPayout.ts';
+import {
+  allocateBetsFifo,
+  getOmenBuyPayout,
+  isAchievementMultiplierEligible,
+} from '../utils/betPayout.ts';
 
 const row = ({
   id,
@@ -71,4 +75,23 @@ test('a fully sold profitable Omen buy qualifies on realized proceeds', () => {
   assert.equal(buy.remainingShares, 0n);
   assert.equal(buy.allocatedProceeds, 1_600n);
   assert.equal(isAchievementMultiplierEligible(buy.allocatedProceeds, buy.originalCost), true);
+});
+
+test('Omen payouts match the trader multi-buy allocation fixture', () => {
+  const bets = allocateBetsFifo([
+    row({ id: 'sell-1', amount: -1_000, shares: -2_000, isBuy: false, timestamp: 3 }),
+    row({ id: 'buy-2', amount: 1_000, shares: 2_000, isBuy: true, timestamp: 2 }),
+    row({ id: 'buy-1', amount: 2_000, shares: 4_000, isBuy: true, timestamp: 1 }),
+  ]);
+  assert.equal(getOmenBuyPayout(bets, 'buy-1', 4_000n, 0, false), 3_000n);
+  assert.equal(getOmenBuyPayout(bets, 'buy-2', 4_000n, 0, false), 2_000n);
+});
+
+test('eligibility uses the three-decimal amounts persisted by trader', () => {
+  assert.equal(isAchievementMultiplierEligible(1_500_600n, 1_000_400n, 6), true);
+  assert.equal(isAchievementMultiplierEligible(1_500_000n, 1_000_000n, 6), false);
+  assert.equal(
+    isAchievementMultiplierEligible(1_500_600_000_000_000_000n, 1_000_400_000_000_000_000n, 18),
+    true,
+  );
 });

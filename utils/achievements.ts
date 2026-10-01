@@ -9,7 +9,11 @@ import {
 } from 'constants/index';
 import { SEO_CONFIG } from 'constants/seo';
 import { AchievementData } from 'types/achievement';
-import { allocateBetsFifo, isAchievementMultiplierEligible } from 'utils/betPayout';
+import {
+  allocateBetsFifo,
+  getOmenBuyPayout,
+  isAchievementMultiplierEligible,
+} from 'utils/betPayout';
 
 type AchievementQuery = {
   betId?: string;
@@ -199,16 +203,22 @@ const fetchOmenAchievementData = async (betId: string): Promise<AchievementData 
   if (!target || target.originalCost <= BigInt(0)) return null;
 
   const fullySold = target.remainingShares <= OMEN_SHARES_EPSILON;
-  let amountWonWei = target.allocatedProceeds;
+  let amountWonWei: bigint | null;
   if (fullySold) {
     // Match the trader: fully exited profitable buys settle from realized proceeds,
     // independent of the market outcome. The achievement checker requires settled_at,
     // which is populated when Omen has a currentAnswerTimestamp.
     if (!omenMarket.currentAnswerTimestamp) return null;
+    amountWonWei = getOmenBuyPayout(
+      allocatedBets,
+      betId.toLowerCase(),
+      BigInt(marketParticipant.totalPayout || '0'),
+      -1,
+      true,
+    );
   } else {
     const answer = omenMarket.currentAnswer ? BigInt(omenMarket.currentAnswer) : null;
     if (
-      !marketParticipant.settled ||
       BigInt(marketParticipant.totalPayout || '0') <= BigInt(0) ||
       omenMarket.isPendingArbitration ||
       !finalizedAt ||
@@ -219,9 +229,18 @@ const fetchOmenAchievementData = async (betId: string): Promise<AchievementData 
     ) {
       return null;
     }
-    amountWonWei += target.remainingShares;
+    amountWonWei = getOmenBuyPayout(
+      allocatedBets,
+      betId.toLowerCase(),
+      BigInt(marketParticipant.totalPayout || '0'),
+      Number(answer),
+      false,
+    );
   }
-  if (!isAchievementMultiplierEligible(amountWonWei, target.originalCost)) return null;
+  if (
+    amountWonWei === null ||
+    !isAchievementMultiplierEligible(amountWonWei, target.originalCost, 18)
+  ) return null;
 
   const betAmount = formatXdai(target.originalCost);
   const amountWon = formatXdai(amountWonWei);
