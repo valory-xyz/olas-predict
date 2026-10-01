@@ -4,6 +4,17 @@ type PolymarketBetMetadata = {
 
 type PolymarketBetQuestion = {
   metadata: PolymarketBetMetadata | null;
+  resolution: { winningIndex: string | null } | null;
+};
+
+export type PolymarketParticipantBet = {
+  id: string;
+  outcomeIndex: string;
+  amount: string;
+  shares: string;
+  isBuy: boolean;
+  blockNumber: string;
+  blockTimestamp: string;
 };
 
 type PolymarketBettor = {
@@ -12,9 +23,11 @@ type PolymarketBettor = {
 
 type PolymarketMarketParticipant = {
   totalPayout: string;
+  bets: PolymarketParticipantBet[];
 };
 
 export type PolymarketBet = {
+  id: string;
   transactionHash: string;
   outcomeIndex: string;
   amount: string;

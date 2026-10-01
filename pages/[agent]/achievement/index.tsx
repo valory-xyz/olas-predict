@@ -1,6 +1,5 @@
 import capitalize from 'lodash/capitalize';
 import { GetServerSideProps } from 'next';
-import Error from 'next/error';
 
 import { AchievementCard } from 'components/AchievementCard';
 import { ACHIEVEMENT_TYPES, AGENTS, AchievementType, TIME_IN_SECONDS } from 'constants/index';
@@ -9,8 +8,9 @@ import { fetchAchievementOgImage, fetchOmenAchievementData } from 'utils/achieve
 
 type AchievementPageProps = {
   seoConfig: { title: string; ogImage: string; noIndex: boolean };
-  agent?: string;
-  type?: AchievementType;
+  agent: string;
+  type: AchievementType;
+  betId: string;
   achievementData: AchievementData | null;
   achievementDataError: boolean;
 };
@@ -21,18 +21,11 @@ const AchievementPage = ({
   achievementData,
   achievementDataError,
 }: AchievementPageProps) => {
-  const normalizedAgent = agent?.toLowerCase();
-
-  if (!normalizedAgent || !type) return <Error statusCode={404} />;
-
-  if (!Object.values(AGENTS).some((validAgent) => validAgent === normalizedAgent))
-    return <Error statusCode={404} />;
-
-  if (!Object.values(ACHIEVEMENT_TYPES).includes(type)) return <Error statusCode={404} />;
-
   return (
     <AchievementCard
       agent={agent}
+      type={type}
+      betId={betId}
       achievementData={achievementData}
       achievementDataError={achievementDataError}
     />
@@ -73,7 +66,7 @@ export const getServerSideProps: GetServerSideProps<AchievementPageProps> = asyn
 
   context.res.setHeader(
     'Cache-Control',
-    achievementData || agentSlug === AGENTS.POLYSTRAT
+    achievementData
       ? `public, s-maxage=${TIME_IN_SECONDS.TWELVE_HOURS}, stale-while-revalidate=${TIME_IN_SECONDS.ONE_HOUR}`
       : `public, s-maxage=${TIME_IN_SECONDS.ONE_MINUTE}`,
   );
@@ -87,6 +80,7 @@ export const getServerSideProps: GetServerSideProps<AchievementPageProps> = asyn
       },
       agent: agentSlug,
       type: type as AchievementType,
+      betId: typeof betId === 'string' ? betId : '',
       achievementData,
       achievementDataError,
     },

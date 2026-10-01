@@ -1,5 +1,5 @@
 import { list } from '@vercel/blob';
-import { gql, request } from 'graphql-request';
+import { gql, GraphQLClient } from 'graphql-request';
 
 import {
   ACHIEVEMENTS_LOOKUP_PREFIX,
@@ -9,6 +9,7 @@ import {
 } from 'constants/index';
 import { SEO_CONFIG } from 'constants/seo';
 import { AchievementData } from 'types/achievement';
+import { allocateBetsFifo, isAchievementMultiplierEligible } from 'utils/betPayout';
 
 type AchievementQuery = {
   betId?: string;
@@ -77,16 +78,11 @@ type OmenBetRow = {
   outcomeIndex: string;
   amount: string;
   outcomeTokenAmount: string;
+  blockNumber: string;
   blockTimestamp: string;
 };
 
-type OmenBetWithFifo = OmenBetRow & {
-  originalCost: bigint;
-  originalShares: bigint;
-  remainingShares: bigint;
-  allocatedCost: bigint;
-  allocatedProceeds: bigint;
-};
+const OMEN_SHARES_EPSILON = 10n ** 16n;
 
 const omenBetQuery = gql`
   query AchievementOmenBet($id: ID!) {
@@ -125,96 +121,63 @@ const omenParticipantQuery = gql`
     marketParticipant(id: $id) {
       settled
       totalPayout
-      bets(orderBy: blockTimestamp, orderDirection: asc) {
+      bets(first: 1000, orderBy: blockTimestamp, orderDirection: asc) {
         id
         outcomeIndex
         amount
         outcomeTokenAmount
+        blockNumber
         blockTimestamp
       }
     }
   }
 `;
 
-const allocateOmenBetFifo = (rows: OmenBetRow[]): Map<string, OmenBetWithFifo> => {
-  const sortedRows = [...rows].sort((a, b) => {
-    const timestampDifference = Number(BigInt(a.blockTimestamp) - BigInt(b.blockTimestamp));
-    return timestampDifference || a.id.localeCompare(b.id);
-  });
-  const buys = new Map<string, OmenBetWithFifo>();
-  const queues = new Map<string, OmenBetWithFifo[]>();
-
-  for (const row of sortedRows) {
-    const amount = BigInt(row.amount);
-    const shares = BigInt(row.outcomeTokenAmount);
-    const outcomeIndex = row.outcomeIndex;
-    const queue = queues.get(outcomeIndex) ?? [];
-    queues.set(outcomeIndex, queue);
-
-    if (amount > BigInt(0)) {
-      const buy: OmenBetWithFifo = {
-        ...row,
-        originalCost: amount,
-        originalShares: shares,
-        remainingShares: shares,
-        allocatedCost: BigInt(0),
-        allocatedProceeds: BigInt(0),
-      };
-      buys.set(row.id, buy);
-      if (shares > BigInt(0)) queue.push(buy);
-      continue;
-    }
-
-    if (amount === BigInt(0) || shares >= BigInt(0)) continue;
-
-    const sharesSold = -shares;
-    const proceeds = -amount;
-    let remainingToAllocate = sharesSold;
-    while (remainingToAllocate > BigInt(0) && queue.length > 0) {
-      const buy = queue[0];
-      const taken =
-        remainingToAllocate < buy.remainingShares ? remainingToAllocate : buy.remainingShares;
-      buy.allocatedProceeds += (proceeds * taken) / sharesSold;
-      buy.allocatedCost += (buy.originalCost * taken) / buy.originalShares;
-      buy.remainingShares -= taken;
-      remainingToAllocate -= taken;
-      if (buy.remainingShares <= BigInt(0)) queue.shift();
-    }
-  }
-
-  return buys;
+const getOmenLogIndex = (id: string): number => {
+  const suffix = id.slice(-8);
+  if (!/^[\da-f]{8}$/i.test(suffix)) return 0;
+  return Number.parseInt(suffix.match(/../g)!.reverse().join(''), 16);
 };
+
+const createSubgraphClient = (url: string) => ({
+  client: new GraphQLClient(url, {
+    fetch: (input, init) => fetch(input, { ...init, signal: AbortSignal.timeout(10_000) }),
+  }),
+});
 
 const formatXdai = (wei: bigint) => Number(wei) / 1e18;
 
 /** Fetches Omen achievement figures from the Omen trader subgraph. */
-export const fetchOmenAchievementData = async (betId: string): Promise<AchievementData | null> => {
+const fetchOmenAchievementData = async (betId: string): Promise<AchievementData | null> => {
   if (!VALID_ENTRY_ID.test(betId)) return null;
 
-  const { bet } = await request<{ bet: OmenBet | null }>(OLAS_AGENTS_SUBGRAPH_URL, omenBetQuery, {
-    id: betId,
+  const agentsSubgraph = createSubgraphClient(OLAS_AGENTS_SUBGRAPH_URL);
+  const omenSubgraph = createSubgraphClient(OMEN_SUBGRAPH_URL);
+  const { bet } = await agentsSubgraph.client.request<{ bet: OmenBet | null }>(omenBetQuery, {
+    id: betId.toLowerCase(),
   });
   const market = bet?.fixedProductMarketMaker;
   if (!bet || !market) return null;
 
   const participantId = `${bet.bettor.id}_${market.id}`.toLowerCase();
   const [{ marketParticipant }, { fixedProductMarketMaker: omenMarket }] = await Promise.all([
-    request<{
+    agentsSubgraph.client.request<{
       marketParticipant: { settled: boolean; totalPayout: string; bets: OmenBetRow[] } | null;
-    }>(OLAS_AGENTS_SUBGRAPH_URL, omenParticipantQuery, { id: participantId }),
-    request<{
+    }>(omenParticipantQuery, { id: participantId }),
+    omenSubgraph.client.request<{
       fixedProductMarketMaker: {
         currentAnswer: string | null;
         answerFinalizedTimestamp: string | null;
         isPendingArbitration: boolean;
       } | null;
-    }>(OMEN_SUBGRAPH_URL, omenMarketSettlementQuery, { id: market.id }),
+    }>(omenMarketSettlementQuery, { id: market.id }),
   ]);
   const finalizedAt = omenMarket?.answerFinalizedTimestamp
     ? Number(omenMarket.answerFinalizedTimestamp)
     : 0;
   if (
     !marketParticipant?.settled ||
+    BigInt(marketParticipant.totalPayout || '0') <= 0n ||
     !omenMarket ||
     omenMarket.isPendingArbitration ||
     !finalizedAt ||
@@ -223,29 +186,33 @@ export const fetchOmenAchievementData = async (betId: string): Promise<Achieveme
     return null;
   }
 
-  const allocatedBets = allocateOmenBetFifo(marketParticipant.bets);
-  const target = allocatedBets.get(betId);
-  if (!target || target.originalCost <= BigInt(0)) return null;
+  const allocatedBets = allocateBetsFifo(
+    marketParticipant.bets.map((row) => ({
+      id: row.id,
+      outcomeIndex: Number(row.outcomeIndex),
+      amount: BigInt(row.amount),
+      shares: BigInt(row.outcomeTokenAmount),
+      blockNumber: BigInt(row.blockNumber),
+      blockTimestamp: BigInt(row.blockTimestamp),
+      logIndex: getOmenLogIndex(row.id),
+      isBuy: BigInt(row.amount) > 0n,
+    })),
+  );
+  const target = allocatedBets.get(betId.toLowerCase());
+  if (!target || target.originalCost <= 0n) return null;
 
-  const remainingCost = target.originalCost - target.allocatedCost;
-  const allBuys = [...allocatedBets.values()];
-  const totalPayout = BigInt(marketParticipant.totalPayout || '0');
   const answer = omenMarket.currentAnswer ? BigInt(omenMarket.currentAnswer) : null;
   if (answer === null || answer > BigInt(1) || Number(target.outcomeIndex) !== Number(answer)) {
     return null;
   }
 
-  const winningCost = allBuys
-    .filter((row) => Number(row.outcomeIndex) === Number(answer))
-    .reduce((sum, row) => sum + row.originalCost - row.allocatedCost, BigInt(0));
+  if (target.remainingShares <= OMEN_SHARES_EPSILON) return null;
   let amountWonWei = target.allocatedProceeds;
-  if (totalPayout > BigInt(0) && winningCost > BigInt(0)) {
-    amountWonWei += (totalPayout * remainingCost) / winningCost;
-  }
+  amountWonWei += target.remainingShares;
+  if (!isAchievementMultiplierEligible(amountWonWei, target.originalCost)) return null;
 
   const betAmount = formatXdai(target.originalCost);
   const amountWon = formatXdai(amountWonWei);
-  if (amountWonWei * BigInt(2) <= target.originalCost * BigInt(3)) return null;
   const position = market.outcomes?.[Number(bet.outcomeIndex)] || 'n/a';
 
   return {
@@ -259,6 +226,8 @@ export const fetchOmenAchievementData = async (betId: string): Promise<Achieveme
     multiplier: betAmount > 0 ? (amountWon / betAmount).toFixed(2) : '0.00',
   };
 };
+
+export { fetchOmenAchievementData };
 
 /**
  * Fetches a single achievement entry by its ID.

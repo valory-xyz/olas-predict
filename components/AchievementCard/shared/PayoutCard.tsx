@@ -1,4 +1,4 @@
-import { Button as AntdButton, Card as AntdCard, Divider, Flex, Typography } from 'antd';
+import { Button as AntdButton, Card as AntdCard, Divider, Flex, Spin, Typography } from 'antd';
 import Image from 'next/image';
 import styled, { css } from 'styled-components';
 
@@ -122,6 +122,7 @@ type PayoutCardProps = {
   iconPath: string;
   iconAlt: string;
   plausibleEventName: string;
+  loading?: boolean;
 };
 
 export const PayoutCard = ({
@@ -134,7 +135,25 @@ export const PayoutCard = ({
   iconPath,
   iconAlt,
   plausibleEventName,
+  loading = false,
 }: PayoutCardProps) => {
+  if (loading) {
+    return (
+      <AchievementContainer>
+        <AchievementCardFrame
+          style={{
+            minHeight: 400,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Spin size="large" />
+        </AchievementCardFrame>
+      </AchievementContainer>
+    );
+  }
+
   if (!data) {
     return (
       <AchievementContainer>

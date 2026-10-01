@@ -10,6 +10,7 @@
     "audit:install-hooks:update": "node scripts/audit-install-hooks.mjs --update",
     "license-check": "node scripts/license-check.mjs",
     "license-check:test": "node --test scripts/license-check.test.mjs",
+    "test:achievement-payout": "node --experimental-strip-types --test scripts/achievement-payout.test.mjs",
     "analyze": "ANALYZE=true next build"
   },
   "dependencies": {
