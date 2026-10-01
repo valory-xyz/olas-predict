@@ -1,16 +1,13 @@
-import { useRouter } from 'next/router';
-
 import { ACHIEVEMENT_TYPES } from 'constants/index';
 
 import { Payout } from './Payout';
 
-export const PolystratAchievementCard = () => {
-  const router = useRouter();
-  const { type } = router.query;
+type PolystratAchievementCardProps = {
+  type: string;
+  betId: string;
+};
 
-  if (!router.isReady || !type) return null;
-
-  if (type === ACHIEVEMENT_TYPES.PAYOUT) return <Payout />;
-
+export const PolystratAchievementCard = ({ type, betId }: PolystratAchievementCardProps) => {
+  if (type === ACHIEVEMENT_TYPES.PAYOUT) return <Payout betId={betId} />;
   return null;
 };

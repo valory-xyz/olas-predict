@@ -484,6 +484,7 @@ const getStakingServiceQuery = gql`
 const getPolymarketDataQuery = gql`
   query GetPolymarketData($id: String!) {
     betById(id: $id) {
+      id
       transactionHash
       outcomeIndex
       amount
@@ -492,10 +493,22 @@ const getPolymarketDataQuery = gql`
       }
       marketParticipant {
         totalPayout
+        bets(limit: 1000) {
+          id
+          outcomeIndex
+          amount
+          shares
+          isBuy
+          blockNumber
+          blockTimestamp
+        }
       }
       question {
         metadata {
           title
+        }
+        resolution {
+          winningIndex
         }
       }
     }
