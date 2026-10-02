@@ -499,7 +499,6 @@ const getPolymarketDataQuery = gql`
           amount
           shares
           isBuy
-          blockNumber
           blockTimestamp
         }
       }

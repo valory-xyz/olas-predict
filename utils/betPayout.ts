@@ -4,7 +4,7 @@ export type FifoBetRow = {
   outcomeIndex: number;
   amount: bigint;
   shares: bigint;
-  blockNumber: bigint;
+  blockNumber?: bigint;
   blockTimestamp: bigint;
   logIndex: number;
   isBuy: boolean;
@@ -41,7 +41,13 @@ const roundToMilliUnits = (value: bigint, decimals: number): bigint => {
 export const allocateBetsFifo = (rows: FifoBetRow[]): Map<string, FifoBuy> => {
   const sortedRows = [...rows].sort((a, b) => {
     if (a.blockTimestamp !== b.blockTimestamp) return a.blockTimestamp < b.blockTimestamp ? -1 : 1;
-    if (a.blockNumber !== b.blockNumber) return a.blockNumber < b.blockNumber ? -1 : 1;
+    if (
+      a.blockNumber !== undefined &&
+      b.blockNumber !== undefined &&
+      a.blockNumber !== b.blockNumber
+    ) {
+      return a.blockNumber < b.blockNumber ? -1 : 1;
+    }
     return a.logIndex - b.logIndex;
   });
   const buys = new Map<string, FifoBuy>();

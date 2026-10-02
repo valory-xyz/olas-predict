@@ -13,7 +13,6 @@ export type PolymarketParticipantBet = {
   amount: string;
   shares: string;
   isBuy: boolean;
-  blockNumber: string;
   blockTimestamp: string;
 };
 
