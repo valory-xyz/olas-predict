@@ -51,7 +51,6 @@ export const usePolystratBet = (betId: string) => {
         outcomeIndex: Number(row.outcomeIndex),
         amount: BigInt(row.amount),
         shares: BigInt(row.shares),
-        blockNumber: BigInt(row.blockNumber),
         blockTimestamp: BigInt(row.blockTimestamp),
         logIndex: getSquidLogIndex(row.id),
         isBuy: row.isBuy,

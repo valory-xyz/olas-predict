@@ -82,7 +82,6 @@ type OmenBetRow = {
   outcomeIndex: string;
   amount: string;
   outcomeTokenAmount: string;
-  blockNumber: string;
   blockTimestamp: string;
 };
 
@@ -131,7 +130,6 @@ const omenParticipantQuery = gql`
         outcomeIndex
         amount
         outcomeTokenAmount
-        blockNumber
         blockTimestamp
       }
     }
@@ -193,7 +191,6 @@ const fetchOmenAchievementData = async (betId: string): Promise<AchievementData 
       outcomeIndex: Number(row.outcomeIndex),
       amount: BigInt(row.amount),
       shares: BigInt(row.outcomeTokenAmount),
-      blockNumber: BigInt(row.blockNumber),
       blockTimestamp: BigInt(row.blockTimestamp),
       logIndex: getOmenLogIndex(row.id),
       isBuy: BigInt(row.amount) > BigInt(0),
