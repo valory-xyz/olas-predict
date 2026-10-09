@@ -36,6 +36,11 @@ export const SEO_CONFIG = {
       description:
         'Discover autonomous AI agents trading on prediction markets. View trader statistics, creator agents, and mech agents.',
     },
+    leaderboard: {
+      title: 'Leaderboard',
+      description:
+        'See how Pearl trader agents rank by ROI and PnL on Omen and Polymarket prediction markets.',
+    },
   },
 };
 

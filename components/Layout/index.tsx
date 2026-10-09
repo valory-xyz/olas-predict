@@ -1,8 +1,10 @@
 import { Layout as AntdLayout } from 'antd';
+import { useRouter } from 'next/router';
 import { ReactNode } from 'react';
 import styled from 'styled-components';
 
 import { MENU_MAX_WIDTH } from 'constants/index';
+import { LEADERBOARD_PATH } from 'constants/leaderboard';
 import { COLOR, MEDIA_QUERY } from 'constants/theme';
 import { useScreen } from 'hooks/useScreen';
 
@@ -54,12 +56,22 @@ export const CustomLayout = styled(AntdLayout)`
   }
 `;
 
-const ContentInner = styled.div`
+const LEADERBOARD_MAX_WIDTH = 1100;
+
+const ContentInner = styled.div.withConfig({
+  shouldForwardProp: (prop) => !['isWide', 'hasSider'].includes(prop),
+})<{ isWide: boolean; hasSider: boolean }>`
   display: flex;
   flex-direction: column;
   flex: auto;
   margin: 0 auto;
-  max-width: 720px;
+  max-width: ${({ isWide, hasSider }) =>
+    // Centered content keeps a menu-width margin on both sides, clear of the fixed menu
+    isWide && hasSider
+      ? `min(${LEADERBOARD_MAX_WIDTH}px, calc(100% - ${2 * MENU_MAX_WIDTH}px))`
+      : isWide
+        ? `${LEADERBOARD_MAX_WIDTH}px`
+        : '720px'};
   width: 100%;
 `;
 
@@ -79,6 +91,7 @@ type LayoutProps = {
 
 export const Layout = ({ children }: LayoutProps) => {
   const { isDesktop } = useScreen();
+  const { pathname } = useRouter();
 
   return (
     <CustomLayout>
@@ -89,7 +102,7 @@ export const Layout = ({ children }: LayoutProps) => {
           </Sider>
         )}
         <Content>
-          <ContentInner>
+          <ContentInner isWide={pathname === LEADERBOARD_PATH} hasSider={!!isDesktop}>
             <BetaBanner>Beta</BetaBanner>
             {!isDesktop && <MobileMenu />}
             {children}

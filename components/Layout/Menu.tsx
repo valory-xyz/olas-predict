@@ -5,6 +5,7 @@ import Link from 'next/link';
 import styled from 'styled-components';
 
 import { MENU_MAX_WIDTH } from 'constants/index';
+import { LEADERBOARD_PATH } from 'constants/leaderboard';
 import { COLOR, MEDIA_QUERY } from 'constants/theme';
 import { useDropdown } from 'hooks/useDropdown';
 
@@ -66,6 +67,9 @@ const MenuContent = ({ closeDropdown }: { closeDropdown?: () => void }) => (
     </Link>
     <Link href={'/agents'} onClick={closeDropdown}>
       Agents
+    </Link>
+    <Link href={LEADERBOARD_PATH} onClick={closeDropdown}>
+      Leaderboard
     </Link>
     <a
       target="_blank"
