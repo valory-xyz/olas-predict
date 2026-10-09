@@ -1,15 +1,15 @@
 /** Parsing of the leaderboard's query parameters, shared by the API routes and the page. */
 import { isAddress } from 'viem';
 
-import { AgentType, OLAS_PREDICT_DOMAIN } from 'constants/index';
+import { type AgentType, OLAS_PREDICT_DOMAIN } from 'constants/index';
 import {
   LEADERBOARD_AGENT_TYPES,
   LEADERBOARD_PATH,
   LEADERBOARD_QUERY_PARAMS,
   LEADERBOARD_WINDOWS,
-  LeaderboardWindow,
+  type LeaderboardWindow,
   RANK_BY,
-  RankBy,
+  type RankBy,
 } from 'constants/leaderboard';
 
 type QueryValue = string | string[] | undefined;
