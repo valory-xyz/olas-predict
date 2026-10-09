@@ -3,7 +3,7 @@
  * the public endpoints read, and the builder's working state, which only the refresh route
  * reads and writes. Uses the runtime-only `BLOB_READ_WRITE_TOKEN`.
  */
-import { head, put } from '@vercel/blob';
+import { BlobNotFoundError, head, put } from '@vercel/blob';
 
 import { AgentType } from 'constants/index';
 import {
@@ -44,7 +44,8 @@ const getSnapshotPath = (agentType: AgentType) =>
 const getStatePath = (agentType: AgentType) =>
   `${LEADERBOARD_BLOB_PREFIX}/${agentType}/builder-state.json`;
 
-const isNotFound = (error: unknown) => error instanceof Error && error.name === 'BlobNotFoundError';
+// The SDK's error classes do not set `name`, so match on the class
+const isNotFound = (error: unknown) => error instanceof BlobNotFoundError;
 
 /** Blob metadata, or `null` when the blob does not exist */
 const headBlob = async (pathname: string) => {
