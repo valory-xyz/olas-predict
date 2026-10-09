@@ -6,11 +6,11 @@ import { LEADERBOARD_AGENT_TYPES } from 'constants/leaderboard';
 import { buildLeaderboard } from 'utils/leaderboard/builder';
 import { readBuilderState, writeBuilderState, writeSnapshot } from 'utils/leaderboard/snapshot';
 
-const MAX_DURATION_SECONDS = 300;
+// Next.js reads `config` statically, so the limit is a literal here; keep MAX_DURATION_MS in step
+export const config = { maxDuration: 300 };
+const MAX_DURATION_MS = 300_000;
 /** Time kept back from the function limit to save the working state */
 const SAVE_MARGIN_MS = 60_000;
-
-export const config = { maxDuration: MAX_DURATION_SECONDS };
 
 type RefreshResponse = {
   updated: AgentType[];
@@ -39,7 +39,7 @@ const handler = async (
 ) => {
   if (!isAuthorized(req)) return res.status(401).json({ error: 'Unauthorized' });
 
-  const deadline = Date.now() + MAX_DURATION_SECONDS * 1000 - SAVE_MARGIN_MS;
+  const deadline = Date.now() + MAX_DURATION_MS - SAVE_MARGIN_MS;
   const results = await Promise.allSettled(
     LEADERBOARD_AGENT_TYPES.map(async (agentType) => {
       const state = await readBuilderState(agentType);
