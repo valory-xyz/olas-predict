@@ -13,7 +13,7 @@ Olas Predict is a Next.js-based prediction market application built for the Olas
 - TanStack Query (React Query) for data fetching
 - Viem for read-only Gnosis Chain access (`publicClient.readContract` / `getLogs` only — no wallet connectors, no signing). Wagmi was removed; see `constants/viemConfig.ts` and `SUPPLY-CHAIN-SECURITY.md` §5a.
 - GraphQL (graphql-request) for subgraph queries
-- Vercel Blob for achievement OG-image lookups (SSR only)
+- Vercel Blob for achievement OG-image lookups (SSR only) and the leaderboard snapshots (API routes only)
 
 ## Development Commands
 
@@ -52,7 +52,9 @@ Copy `.env.example` to `.env.local` and configure:
 - `NEXT_PUBLIC_PREDICT_POLYMARKET_SQUID_URL` - Polymarket SQD squid used by Polystrat achievement lookups. It uses SQD's OpenReader GraphQL dialect (`limit`/`offset`, `field_op`, `orderBy: field_DIRECTION`, `xById(id:)`, `squidStatus { height }`); the previous Polymarket agents subgraph stopped indexing bets in June 2026. Bet id conversion from `{txHash}{logIndex}` to `{txHash}_{logIndex}` lives in `utils/polymarket.ts`.
 
 Runtime-only secrets (not in `.env.example`, configured in the Vercel dashboard):
-- `BLOB_READ_WRITE_TOKEN` - Vercel Blob read token used by `utils/achievements.ts` during SSR. Must stay runtime-only — never expose to the bundle.
+- `BLOB_READ_WRITE_TOKEN` - Vercel Blob token used by `utils/achievements.ts` during SSR (read) and by `utils/leaderboard/snapshot.ts` (read and write — the leaderboard refresh writes snapshots, so the token must allow writes). Must stay runtime-only — never expose to the bundle.
+- `CRON_SECRET` - Bearer secret Vercel Cron sends to `/api/leaderboard/refresh`; any other caller gets `401`. Never `NEXT_PUBLIC_`.
+- `POLYGON_RPC_URL` (optional) - Polygon RPC for the leaderboard's service-metadata reads; defaults to a public endpoint.
 
 ## Architecture Overview
 
@@ -61,12 +63,22 @@ Runtime-only secrets (not in `.env.example`, configured in the Vercel dashboard)
 The app uses Next.js Pages Router. Top-level routes:
 - `/questions` - Lists prediction market questions with filters (all/opened/closed)
 - `/agents` - Three sections: trader agents, creator agents, mech agents
+- `/leaderboard` - Pearl trader agents (Omenstrat/Polystrat) ranked by ROI or PnL over 7D/30D/90D/1Y, with name search, pins kept in `localStorage` (`PINNED_AGENTS_STORAGE_KEY`) and the `?pin=` deep link from the Pearl Agent Profile. State lives in the URL query (`agentType`, `rankBy`, `window`). Only this page widens the content column (1100px)
 - Root `/` redirects to `/questions?state=opened` (configured in `next.config.js`, no `pages/index.tsx`)
 
 Dynamic routes:
 - `/questions/[id]` - Individual market detail (param is the FPMM address, lowercased before query)
 - `/agents/[id]` - Individual trader agent detail (param is the agent address)
 - `/[agent]/achievement/...` - Achievement / payout cards (e.g. `/polystrat/achievement/?betId=...&type=payout`). `getServerSideProps` validates the agent + type and gets the OG image from Vercel Blob. Polystrat figures come from the Polymarket SQD squid; Omenstrat figures come from the Omen trader and market subgraphs. Achievement cards do not fetch market thumbnails. Supports both agents and bypasses the main `Layout` wrapper.
+
+### API routes (`pages/api/leaderboard/`)
+
+The leaderboard is computed server-side, never per request:
+- `refresh.ts` — cron-only (`vercel.json` `crons`, hourly; needs the Vercel Pro plan). Requires `Authorization: Bearer ${CRON_SECRET}`. For each agent type, `utils/leaderboard/builder.ts` brings a working state up to date (Pearl flag per service, mech requests, per-market bet tallies — stored in Blob under `leaderboard/<type>/builder-state.json`), re-reads a year of `dailyProfitStatistics`, and writes `leaderboard/<type>/snapshot.json`. A run stops at its time budget and resumes on the next one; until the first backfill completes no snapshot exists.
+- `index.ts` (`GET /api/leaderboard`) and `agents.ts` (`GET /api/leaderboard/agents`) — public, read the snapshot only, answer `503` until one exists. `agents.ts` is also called server-side by the trader agent for its Agent Profile rank, so its response shape is a cross-repo contract (OPE-1945).
+- Pearl agents are those whose service metadata description starts with `[Pearl service]` (`utils/leaderboard/pearl.ts`). Names use Pearl's `generateAgentName(chainId, serviceId)` (`utils/agentName.ts`), not `generateName(address)`.
+- ROI/PnL mirror the trader agent's own Profile figures applied to the window (`utils/leaderboard/metrics.ts`).
+- Tests: `yarn test:leaderboard` (`node:test`, loads TypeScript through `scripts/ts-resolve.mjs`, which maps the path aliases).
 
 ### Data Layer
 
@@ -82,6 +94,8 @@ The app queries multiple subgraphs (mostly Gnosis Chain):
 - **Registry subgraph** (env: `NEXT_PUBLIC_REGISTRY_GRAPH_URL`): 7-day DAA averages for the `LiveAgentsBanner` (see `utils/registry.ts`)
 - **Polymarket SQD squid** (env: `NEXT_PUBLIC_PREDICT_POLYMARKET_SQUID_URL`): Polystrat achievement bet lookups via the OpenReader dialect (`usePolystratBet`); use `limit`/`offset`, `field_op`, `orderBy: field_DIRECTION`, `xById(id:)`, and `squidStatus { height }`. Bet id normalization is in `utils/polymarket.ts`.
 - **Omen trader subgraph** (`OLAS_AGENTS_SUBGRAPH_URL`): Omenstrat achievement bet and participant data; achievement cards do not fetch market images
+- **predict-omen** (`PREDICT_OMEN_SUBGRAPH_URL`): the trader agent's own Omen deployment, with per-day `dailyProfitStatistics`; used by the leaderboard builder
+- **Mech marketplace Polygon** (`OLAS_MECH_POLYGON_SUBGRAPH_URL`): Polystrat mech requests for the leaderboard
 
 All GraphQL types are auto-generated in `graphql/types.ts` (ignored by ESLint).
 
