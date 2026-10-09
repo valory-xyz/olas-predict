@@ -641,3 +641,156 @@ export const getStakingService = async (params: { id: string }) =>
 
 export const getPolymarketData = async (params: { id: string }) =>
   request<PolymarketDataResponse>(POLYMARKET_SQUID_URL, getPolymarketDataQuery, params);
+
+// Leaderboard (server-side only, used by utils/leaderboard/sources.ts).
+// Omen queries use the subgraph dialect against the agent's predict-omen deployment;
+// Polymarket queries use the squid's OpenReader dialect.
+
+export const leaderboardOmenTraderAgentsQuery = gql`
+  query LeaderboardOmenTraderAgents($idGt: Bytes!) {
+    traderAgents(first: 1000, orderBy: id, orderDirection: asc, where: { id_gt: $idGt }) {
+      id
+      serviceId
+    }
+    _meta {
+      block {
+        number
+      }
+    }
+  }
+`;
+
+export const leaderboardOmenDailyStatisticsQuery = gql`
+  query LeaderboardOmenDailyStatistics($dateGte: BigInt!, $dateLt: BigInt!, $idGt: ID!) {
+    dailyProfitStatistics(
+      first: 1000
+      orderBy: id
+      orderDirection: asc
+      where: { date_gte: $dateGte, date_lt: $dateLt, id_gt: $idGt }
+    ) {
+      id
+      date
+      traderAgent {
+        id
+      }
+      totalBets
+      totalTraded
+      dailyTradedSettled
+      dailyFeesSettled
+      dailyProfit
+      brierSum
+      brierCount
+      profitParticipants {
+        id
+        question
+      }
+    }
+  }
+`;
+
+export const leaderboardOmenBetsQuery = gql`
+  query LeaderboardOmenBets($bettor: String!, $markets: [String!]!, $skip: Int!) {
+    bets(
+      first: 1000
+      skip: $skip
+      orderBy: id
+      where: { bettor: $bettor, fixedProductMarketMaker_in: $markets }
+    ) {
+      outcomeIndex
+      fixedProductMarketMaker {
+        id
+      }
+    }
+  }
+`;
+
+export const leaderboardOmenFinalizationQuery = gql`
+  query LeaderboardOmenFinalization($ids: [ID!]!) {
+    fixedProductMarketMakers(first: 1000, where: { id_in: $ids }) {
+      id
+      currentAnswer
+      answerFinalizedTimestamp
+      isPendingArbitration
+    }
+  }
+`;
+
+export const leaderboardPolymarketTraderAgentsQuery = gql`
+  query LeaderboardPolymarketTraderAgents($offset: Int!) {
+    traderAgents(limit: 1000, offset: $offset, orderBy: id_ASC) {
+      id
+      serviceId
+    }
+    squidStatus {
+      height
+    }
+  }
+`;
+
+export const leaderboardPolymarketDailyStatisticsQuery = gql`
+  query LeaderboardPolymarketDailyStatistics($dateGte: BigInt!, $offset: Int!) {
+    dailyProfitStatistics(
+      limit: 1000
+      offset: $offset
+      orderBy: id_ASC
+      where: { date_gte: $dateGte }
+    ) {
+      id
+      date
+      traderAgentId
+      totalBets
+      totalTraded
+      dailyTradedSettled
+      dailyProfit
+      brierSum
+      brierCount
+      profitParticipants
+    }
+  }
+`;
+
+export const leaderboardPolymarketQuestionsQuery = gql`
+  query LeaderboardPolymarketQuestions($ids: [String!]!) {
+    questions(limit: 1000, where: { id_in: $ids }) {
+      id
+      metadata {
+        title
+      }
+      resolution {
+        winningIndex
+      }
+    }
+  }
+`;
+
+export const leaderboardPolymarketBetsQuery = gql`
+  query LeaderboardPolymarketBets($bettor: String!, $questions: [String!]!, $offset: Int!) {
+    bets(
+      limit: 1000
+      offset: $offset
+      orderBy: id_ASC
+      where: { bettorId_eq: $bettor, questionId_in: $questions }
+    ) {
+      outcomeIndex
+      questionId
+    }
+  }
+`;
+
+export const leaderboardMechRequestsQuery = gql`
+  query LeaderboardMechRequests($sender: String!, $timestampGt: BigInt!, $skip: Int!) {
+    requests(
+      first: 1000
+      skip: $skip
+      orderBy: blockTimestamp
+      orderDirection: asc
+      where: { sender: $sender, blockTimestamp_gt: $timestampGt }
+    ) {
+      id
+      blockTimestamp
+      parsedRequest {
+        questionTitle
+      }
+    }
+  }
+`;
