@@ -4,6 +4,7 @@ import test from 'node:test';
 import { INVALID_ANSWER_HEX } from '../constants/index.ts';
 import { MECH_FEE_USD, MIN_SETTLED_BETS_PER_WINDOW } from '../constants/leaderboard.ts';
 import { generateAgentName } from '../utils/agentName.ts';
+import { computeSnapshot } from '../utils/leaderboard/compute.ts';
 import {
   SECONDS_PER_DAY,
   attributeMechFees,
@@ -15,6 +16,7 @@ import {
 import { getLeaderboardUrl, parseAddress } from '../utils/leaderboard/params.ts';
 import { isPearlAgent } from '../utils/leaderboard/pearl.ts';
 import { assignRanks, getNotRankedReason, searchByName } from '../utils/leaderboard/ranking.ts';
+import { isCronAuthorized } from '../utils/leaderboard/respond.ts';
 import { getAgentRecords, getLeaderboardPage } from '../utils/leaderboard/views.ts';
 
 const DAY = SECONDS_PER_DAY;
@@ -111,10 +113,9 @@ test('an agent with zero settled cost is not ranked', () => {
 test('window bounds include the cutoff day and exclude the day before, for 7D and 1Y', () => {
   for (const windowDays of [7, 365]) {
     const cutoff = TODAY - (windowDays - 1) * DAY;
-    const metrics = metricsFor(
-      [day(cutoff, { profit: 1 }), day(cutoff - DAY, { profit: 100 })],
-      { windowDays },
-    );
+    const metrics = metricsFor([day(cutoff, { profit: 1 }), day(cutoff - DAY, { profit: 100 })], {
+      windowDays,
+    });
     assert.equal(metrics.pnl, 1, `${windowDays}d`);
   }
 });
@@ -196,12 +197,15 @@ test('ranks are highest first, ties broken by trades then address', () => {
     ].map(({ address, metrics }) => ({ address, metrics })),
     'roi',
   );
-  assert.deepEqual([...ranks], [
-    ['0xb', 1],
-    ['0xd', 2],
-    ['0xa', 3],
-    ['0xc', 4],
-  ]);
+  assert.deepEqual(
+    [...ranks],
+    [
+      ['0xb', 1],
+      ['0xd', 2],
+      ['0xa', 3],
+      ['0xc', 4],
+    ],
+  );
 });
 
 test('search is a case-insensitive substring match, ranked matches first', () => {
@@ -246,12 +250,25 @@ test('the deep link carries agent type, ROI, window and the pinned Safe', () => 
     getLeaderboardUrl('polystrat', '30d', '0xabc'),
     'https://predict.olas.network/leaderboard?agentType=polystrat&rankBy=roi&window=30d&pin=0xabc',
   );
-  assert.equal(parseAddress('0xFE94203ab2c1c22fe8585cbebf865f7b69eb7027'), '0xfe94203ab2c1c22fe8585cbebf865f7b69eb7027');
+  assert.equal(
+    parseAddress('0xFE94203ab2c1c22fe8585cbebf865f7b69eb7027'),
+    '0xfe94203ab2c1c22fe8585cbebf865f7b69eb7027',
+  );
   assert.equal(parseAddress('0xnope'), null);
 });
 
 const entry = (rankByRoi, rankByPnl, notRankedReason = null) => ({
-  metrics: notRankedReason ? null : { roi: 0.1, pnl: 1, accuracy: null, brierScore: null, avgTradeSize: null, volume: 1, trades: 5 },
+  metrics: notRankedReason
+    ? null
+    : {
+        roi: 0.1,
+        pnl: 1,
+        accuracy: null,
+        brierScore: null,
+        avgTradeSize: null,
+        volume: 1,
+        trades: 5,
+      },
   rankByRoi,
   rankByPnl,
   notRankedReason,
@@ -279,15 +296,38 @@ const snapshot = {
 test('the list holds ranked agents only, in order of the selected criterion', () => {
   const page = (rankBy) =>
     getLeaderboardPage({ snapshot, window: '7d', rankBy, search: '', offset: 0, limit: 30 });
-  assert.deepEqual(page('roi').agents.map((row) => row.address), ['0x2', '0x1']);
-  assert.deepEqual(page('pnl').agents.map((row) => row.address), ['0x1', '0x2']);
+  assert.deepEqual(
+    page('roi').agents.map((row) => row.address),
+    ['0x2', '0x1'],
+  );
+  assert.deepEqual(
+    page('pnl').agents.map((row) => row.address),
+    ['0x1', '0x2'],
+  );
   assert.equal(page('roi').totalResults, 2);
-  const second = getLeaderboardPage({ snapshot, window: '7d', rankBy: 'roi', search: '', offset: 1, limit: 1 });
-  assert.deepEqual(second.agents.map((row) => row.address), ['0x1']);
+  const second = getLeaderboardPage({
+    snapshot,
+    window: '7d',
+    rankBy: 'roi',
+    search: '',
+    offset: 1,
+    limit: 1,
+  });
+  assert.deepEqual(
+    second.agents.map((row) => row.address),
+    ['0x1'],
+  );
 });
 
 test('search lists not-ranked matches after ranked ones, with a null rank', () => {
-  const { agents } = getLeaderboardPage({ snapshot, window: '7d', rankBy: 'roi', search: 'alp', offset: 0, limit: 30 });
+  const { agents } = getLeaderboardPage({
+    snapshot,
+    window: '7d',
+    rankBy: 'roi',
+    search: 'alp',
+    offset: 0,
+    limit: 30,
+  });
   assert.deepEqual(
     agents.map((row) => [row.address, row.rank, row.notRankedReason]),
     [
@@ -300,7 +340,12 @@ test('search lists not-ranked matches after ranked ones, with a null rank', () =
 test('per-address records keep request order and mark unknown Safes not ranked yet', () => {
   const records = getAgentRecords(snapshot, '7d', ['0x9', '0x1']);
   assert.deepEqual(
-    records.map((record) => [record.address, record.ranked, record.notRankedReason, record.rankByRoi]),
+    records.map((record) => [
+      record.address,
+      record.ranked,
+      record.notRankedReason,
+      record.rankByRoi,
+    ]),
     [
       ['0x9', false, 'not_ranked_yet', null],
       ['0x1', true, null, 2],
@@ -308,4 +353,65 @@ test('per-address records keep request order and mark unknown Safes not ranked y
   );
   assert.equal(records[0].name, null);
   assert.equal(records[1].leaderboardUrl, getLeaderboardUrl('omenstrat', '7d', '0x1'));
+});
+
+test('computeSnapshot ranks each window and nulls metrics of agents not ranked there', () => {
+  // Five settled bets today: ranked in every window
+  const settledToday = (profit) =>
+    day(TODAY, { profit, tradedSettled: 10, brierCount: 5, brierSum: 1, bets: 5, traded: 10 });
+  const agents = [
+    { address: '0xa', serviceId: '592', days: [settledToday(1)], requests: [], tallies: {} },
+    { address: '0xb', serviceId: '1549', days: [settledToday(3)], requests: [], tallies: {} },
+    // Settled activity only 40 days ago: ranked in 90D and 1Y only
+    {
+      address: '0xc',
+      serviceId: '2265',
+      days: [day(TODAY - 40 * DAY, { profit: 9, tradedSettled: 10, brierCount: 5, bets: 5 })],
+      requests: [],
+      tallies: {},
+    },
+    // Bets placed but nothing settled yet
+    {
+      address: '0xd',
+      serviceId: '1',
+      days: [day(TODAY, { bets: 2, traded: 2 })],
+      requests: [],
+      tallies: {},
+    },
+  ];
+  const result = computeSnapshot({
+    agentType: 'omenstrat',
+    agents,
+    marketTitles: {},
+    nowSeconds: NOW,
+    sourceHeight: 42,
+  });
+  const byAddress = Object.fromEntries(result.agents.map((agent) => [agent.address, agent]));
+
+  assert.deepEqual(result.totalRanked, { '7d': 2, '30d': 2, '90d': 3, '1y': 3 });
+  assert.equal(byAddress['0xb'].windows['7d'].rankByRoi, 1);
+  assert.equal(byAddress['0xa'].windows['7d'].rankByRoi, 2);
+  assert.equal(byAddress['0xc'].windows['90d'].rankByPnl, 1);
+  assert.deepEqual(byAddress['0xc'].windows['7d'], {
+    metrics: null,
+    rankByRoi: null,
+    rankByPnl: null,
+    notRankedReason: 'not_enough_trades_in_window',
+  });
+  assert.equal(byAddress['0xd'].hasSettledActivity, false);
+  assert.equal(byAddress['0xd'].windows['1y'].notRankedReason, 'not_ranked_yet');
+  assert.equal(byAddress['0xa'].name, 'latron-majan66');
+  assert.equal(byAddress['0xb'].windows['7d'].metrics.roi, 0.3);
+  assert.equal('settledBets' in byAddress['0xb'].windows['7d'].metrics, false);
+  assert.equal(result.sourceHeight, 42);
+});
+
+test('the refresh route accepts only the exact cron bearer secret', () => {
+  assert.equal(isCronAuthorized('Bearer s3cret', 's3cret'), true);
+  assert.equal(isCronAuthorized('Bearer wrong!', 's3cret'), false);
+  assert.equal(isCronAuthorized('Bearer s3cret-longer', 's3cret'), false);
+  assert.equal(isCronAuthorized(undefined, 's3cret'), false);
+  // An unset secret never authorizes, even against an empty bearer
+  assert.equal(isCronAuthorized('Bearer ', undefined), false);
+  assert.equal(isCronAuthorized('Bearer ', ''), false);
 });

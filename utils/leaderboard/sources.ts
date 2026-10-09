@@ -125,16 +125,18 @@ export const fetchTraderAgents = async (agentType: AgentType): Promise<AgentPopu
     return { agents, sourceHeight };
   }
 
-  for (let offset = 0; ; offset += PAGE_SIZE) {
+  let idGt = '';
+  for (;;) {
     const page = await request<{
       traderAgents: { id: string; serviceId: string }[];
       squidStatus: { height: number };
-    }>(POLYMARKET_SQUID_URL, leaderboardPolymarketTraderAgentsQuery, { offset });
+    }>(POLYMARKET_SQUID_URL, leaderboardPolymarketTraderAgentsQuery, { idGt });
     sourceHeight ??= page.squidStatus.height;
     page.traderAgents.forEach(({ id, serviceId }) =>
       agents.push({ address: id.toLowerCase(), serviceId }),
     );
     if (page.traderAgents.length < PAGE_SIZE) break;
+    idGt = page.traderAgents[page.traderAgents.length - 1].id;
   }
   return { agents, sourceHeight };
 };
@@ -237,11 +239,12 @@ export const fetchDailyStatistics = async (
     return { daysByAgent, omenTitles };
   }
 
-  for (let offset = 0; ; offset += PAGE_SIZE) {
+  let idGt = '';
+  for (;;) {
     const page = await request<{ dailyProfitStatistics: PolymarketDailyStatisticRow[] }>(
       POLYMARKET_SQUID_URL,
       leaderboardPolymarketDailyStatisticsQuery,
-      { dateGte: String(dateGte), offset },
+      { dateGte: String(dateGte), idGt },
     );
     page.dailyProfitStatistics.forEach((row) => {
       pushDay(daysByAgent, row.traderAgentId.toLowerCase(), {
@@ -258,6 +261,7 @@ export const fetchDailyStatistics = async (
       });
     });
     if (page.dailyProfitStatistics.length < PAGE_SIZE) break;
+    idGt = page.dailyProfitStatistics[page.dailyProfitStatistics.length - 1].id;
   }
   return { daysByAgent, omenTitles };
 };

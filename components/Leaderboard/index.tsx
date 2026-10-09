@@ -126,6 +126,8 @@ export const Leaderboard = ({
   );
 
   const isUnavailable = list.error instanceof LeaderboardRequestError && list.error.status === 503;
+  // A failed "Load more" keeps the rows already loaded
+  const hasListFailed = list.isError && !list.data;
 
   return (
     <Flex vertical gap={24} className="flex-auto">
@@ -143,7 +145,7 @@ export const Leaderboard = ({
         onSearchChange={setSearchInput}
       />
       <LeaderboardCard type="ongoing">
-        {list.isError ? (
+        {hasListFailed ? (
           <Text type="secondary" className="text-center">
             {isUnavailable
               ? 'Leaderboard data is not available yet. Please check back later.'
@@ -154,6 +156,9 @@ export const Leaderboard = ({
             {totalRanked !== undefined && (
               <Text type="secondary">{`${totalRanked.toLocaleString('en-US')} ranked agents`}</Text>
             )}
+            {pinned.isError && (
+              <Text type="danger">Pinned agents could not be loaded. Please try again later.</Text>
+            )}
             <LeaderboardTable
               rows={rows}
               pinnedRows={pinnedRows}
@@ -162,6 +167,7 @@ export const Leaderboard = ({
               onClearSearch={() => setSearchInput('')}
               hasMore={!!list.hasNextPage}
               isLoadingMore={list.isFetchingNextPage}
+              hasLoadMoreFailed={list.isFetchNextPageError}
               onLoadMore={() => list.fetchNextPage()}
               agentType={agentType}
               rankBy={rankBy}

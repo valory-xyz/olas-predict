@@ -200,6 +200,7 @@ type LeaderboardTableProps = ColumnOptions & {
   onClearSearch: () => void;
   hasMore: boolean;
   isLoadingMore: boolean;
+  hasLoadMoreFailed: boolean;
   onLoadMore: () => void;
 };
 
@@ -211,6 +212,7 @@ export const LeaderboardTable = ({
   onClearSearch,
   hasMore,
   isLoadingMore,
+  hasLoadMoreFailed,
   onLoadMore,
   ...columnOptions
 }: LeaderboardTableProps) => {
@@ -262,7 +264,10 @@ export const LeaderboardTable = ({
         }
       />
       {hasMore && (
-        <Flex justify="center">
+        <Flex vertical align="center" gap={8}>
+          {hasLoadMoreFailed && (
+            <Text type="danger">More agents could not be loaded. Please try again.</Text>
+          )}
           <Button size="large" loading={isLoadingMore} onClick={onLoadMore}>
             Load more
           </Button>

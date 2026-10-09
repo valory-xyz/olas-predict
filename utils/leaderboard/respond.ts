@@ -1,5 +1,6 @@
 /** Response helpers shared by the public leaderboard API routes. */
 import type { NextApiResponse } from 'next';
+import { timingSafeEqual } from 'node:crypto';
 
 import { TIME_IN_SECONDS } from 'constants/index';
 import type { LeaderboardErrorResponse } from 'types/leaderboard';
@@ -23,3 +24,11 @@ export const setSuccessCacheHeaders = (res: NextApiResponse) =>
     'Cache-Control',
     `public, s-maxage=${TIME_IN_SECONDS.FIVE_MINUTES}, stale-while-revalidate=${TIME_IN_SECONDS.ONE_HOUR}`,
   );
+
+/** Whether an `Authorization` header carries the cron secret; never true without a secret */
+export const isCronAuthorized = (header: string | undefined, secret: string | undefined) => {
+  if (!secret || !header) return false;
+  const expected = Buffer.from(`Bearer ${secret}`);
+  const received = Buffer.from(header);
+  return expected.length === received.length && timingSafeEqual(expected, received);
+};

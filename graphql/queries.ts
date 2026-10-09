@@ -716,8 +716,8 @@ export const leaderboardOmenFinalizationQuery = gql`
 `;
 
 export const leaderboardPolymarketTraderAgentsQuery = gql`
-  query LeaderboardPolymarketTraderAgents($offset: Int!) {
-    traderAgents(limit: 1000, offset: $offset, orderBy: id_ASC) {
+  query LeaderboardPolymarketTraderAgents($idGt: String!) {
+    traderAgents(limit: 1000, orderBy: id_ASC, where: { id_gt: $idGt }) {
       id
       serviceId
     }
@@ -728,12 +728,11 @@ export const leaderboardPolymarketTraderAgentsQuery = gql`
 `;
 
 export const leaderboardPolymarketDailyStatisticsQuery = gql`
-  query LeaderboardPolymarketDailyStatistics($dateGte: BigInt!, $offset: Int!) {
+  query LeaderboardPolymarketDailyStatistics($dateGte: BigInt!, $idGt: String!) {
     dailyProfitStatistics(
       limit: 1000
-      offset: $offset
       orderBy: id_ASC
-      where: { date_gte: $dateGte }
+      where: { date_gte: $dateGte, id_gt: $idGt }
     ) {
       id
       date

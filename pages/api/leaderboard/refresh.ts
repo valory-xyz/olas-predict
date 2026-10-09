@@ -1,9 +1,9 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { timingSafeEqual } from 'node:crypto';
 
 import { AgentType } from 'constants/index';
 import { LEADERBOARD_AGENT_TYPES } from 'constants/leaderboard';
 import { buildLeaderboard } from 'utils/leaderboard/builder';
+import { isCronAuthorized } from 'utils/leaderboard/respond';
 import { readBuilderState, writeBuilderState, writeSnapshot } from 'utils/leaderboard/snapshot';
 
 // Next.js reads `config` statically, so the limit is a literal here; keep MAX_DURATION_MS in step
@@ -20,15 +20,6 @@ type RefreshResponse = {
   updatedAt: string;
 };
 
-const isAuthorized = (req: NextApiRequest) => {
-  const secret = process.env.CRON_SECRET;
-  const header = req.headers.authorization;
-  if (!secret || !header) return false;
-  const expected = Buffer.from(`Bearer ${secret}`);
-  const received = Buffer.from(header);
-  return expected.length === received.length && timingSafeEqual(expected, received);
-};
-
 /**
  * Cron-only: rebuilds each agent type's snapshot. Agent types build independently, so one
  * failing source does not block the other, and a type that fails keeps its previous snapshot.
@@ -37,14 +28,20 @@ const handler = async (
   req: NextApiRequest,
   res: NextApiResponse<RefreshResponse | { error: string }>,
 ) => {
-  if (!isAuthorized(req)) return res.status(401).json({ error: 'Unauthorized' });
+  if (!isCronAuthorized(req.headers.authorization, process.env.CRON_SECRET))
+    return res.status(401).json({ error: 'Unauthorized' });
 
   const deadline = Date.now() + MAX_DURATION_MS - SAVE_MARGIN_MS;
   const results = await Promise.allSettled(
     LEADERBOARD_AGENT_TYPES.map(async (agentType) => {
       const state = await readBuilderState(agentType);
-      const { state: nextState, snapshot } = await buildLeaderboard(agentType, state, deadline);
-      await writeBuilderState(agentType, nextState);
+      let snapshot;
+      try {
+        ({ snapshot } = await buildLeaderboard(agentType, state, deadline));
+      } finally {
+        // The builder updates `state` as it goes, so keep what this run fetched even if it failed
+        await writeBuilderState(agentType, state);
+      }
       if (snapshot) await writeSnapshot(snapshot);
       return snapshot ? 'updated' : 'pending';
     }),

@@ -1,3 +1,4 @@
+import { message } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
 
 import { AgentType } from 'constants/index';
@@ -24,11 +25,14 @@ const readPins = (): PinnedAgent[] => {
   }
 };
 
+/** `false` when the browser refuses to store the pins (e.g. storage disabled or full) */
 const writePins = (pins: PinnedAgent[]) => {
   try {
     localStorage.setItem(PINNED_AGENTS_STORAGE_KEY, JSON.stringify(pins));
+    return true;
   } catch (error) {
     console.error('Leaderboard: pins could not be saved', error);
+    return false;
   }
 };
 
@@ -48,7 +52,8 @@ export const usePinnedAgents = () => {
   const update = useCallback((change: (current: PinnedAgent[]) => PinnedAgent[]) => {
     // Re-read so a pin added in another tab is not overwritten
     const next = change(readPins());
-    writePins(next);
+    // The pins still apply for this visit, but tell the user they will not be remembered
+    if (!writePins(next)) message.warning('Pins cannot be saved in this browser.');
     setPins(next);
   }, []);
 
