@@ -38,6 +38,11 @@ export type LeaderboardSnapshot = {
   sourceHeight: number | null;
   totalRanked: Record<LeaderboardWindow, number>;
   agents: SnapshotAgent[];
+  /**
+   * Safes of active trader agents of this type that are not Pearl agents: never ranked, and
+   * reported as `not_eligible`. Absent in snapshots written before it existed.
+   */
+  excluded?: string[];
 };
 
 export type LeaderboardRow = {

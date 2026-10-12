@@ -36,12 +36,15 @@ export type AgentInputs = {
 export const computeSnapshot = ({
   agentType,
   agents,
+  excluded,
   marketTitles,
   nowSeconds,
   sourceHeight,
 }: {
   agentType: AgentType;
   agents: AgentInputs[];
+  /** Safes of known trader agents left out as not Pearl */
+  excluded: string[];
   marketTitles: MarketTitles;
   nowSeconds: number;
   sourceHeight: number | null;
@@ -129,5 +132,6 @@ export const computeSnapshot = ({
       number
     >,
     agents: snapshotAgents,
+    excluded,
   };
 };

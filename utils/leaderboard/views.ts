@@ -79,6 +79,7 @@ export const getAgentRecords = (
   addresses: string[],
 ): LeaderboardAgentRecord[] => {
   const byAddress = new Map(snapshot.agents.map((agent) => [agent.address, agent]));
+  const excluded = new Set(snapshot.excluded ?? []);
   return addresses.map((address) => {
     const leaderboardUrl = getLeaderboardUrl(snapshot.agentType, window, address);
     const agent = byAddress.get(address);
@@ -87,7 +88,8 @@ export const getAgentRecords = (
         address,
         name: null,
         ranked: false,
-        notRankedReason: 'not_ranked_yet',
+        // A known non-Pearl trader is never ranked; any other Safe may be once it trades
+        notRankedReason: excluded.has(address) ? 'not_eligible' : 'not_ranked_yet',
         rankByRoi: null,
         rankByPnl: null,
         metrics: null,

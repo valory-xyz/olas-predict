@@ -421,6 +421,7 @@ const snapshot = {
   updatedAt: '2026-10-08T12:00:00.000Z',
   sourceHeight: 1,
   totalRanked: { '7d': 2, '30d': 2, '90d': 2, '1y': 2 },
+  excluded: ['0x8'],
   agents: [
     ['0x1', 'alpha', entry(2, 1)],
     ['0x2', 'beta', entry(1, 2)],
@@ -479,7 +480,7 @@ test('search lists not-ranked matches after ranked ones, with a null rank', () =
 });
 
 test('per-address records keep request order and mark unknown Safes not ranked yet', () => {
-  const records = getAgentRecords(snapshot, '7d', ['0x9', '0x1']);
+  const records = getAgentRecords(snapshot, '7d', ['0x9', '0x1', '0x8']);
   assert.deepEqual(
     records.map((record) => [
       record.address,
@@ -490,8 +491,12 @@ test('per-address records keep request order and mark unknown Safes not ranked y
     [
       ['0x9', false, 'not_ranked_yet', null],
       ['0x1', true, null, 2],
+      ['0x8', false, 'not_eligible', null],
     ],
   );
+  // Snapshots written before `excluded` existed still answer
+  const older = { ...snapshot, excluded: undefined };
+  assert.equal(getAgentRecords(older, '7d', ['0x8'])[0].notRankedReason, 'not_ranked_yet');
   assert.equal(records[0].name, null);
   assert.equal(records[1].leaderboardUrl, getLeaderboardUrl('omenstrat', '7d', '0x1'));
 });
@@ -532,10 +537,12 @@ test('computeSnapshot ranks each window and nulls metrics of agents not ranked t
   const result = computeSnapshot({
     agentType: 'omenstrat',
     agents,
+    excluded: ['0xe'],
     marketTitles: {},
     nowSeconds: NOW,
     sourceHeight: 42,
   });
+  assert.deepEqual(result.excluded, ['0xe']);
   const byAddress = Object.fromEntries(result.agents.map((agent) => [agent.address, agent]));
 
   assert.deepEqual(result.totalRanked, { '7d': 2, '30d': 2, '90d': 3, '1y': 3 });

@@ -286,6 +286,13 @@ export const buildLeaderboard = async (
     nowSeconds,
     sourceHeight: population.sourceHeight,
     marketTitles,
+    // Known not to be Pearl agents; a service whose lookup gave up stays unknown
+    excluded: activeAgents
+      .filter(({ serviceId }) => {
+        const status = state.pearl[serviceId]?.status;
+        return status === 'other' || status === 'malformed';
+      })
+      .map(({ address }) => address),
     agents: pearlAgents.map(({ address, serviceId }) => ({
       address,
       serviceId,

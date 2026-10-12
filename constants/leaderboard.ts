@@ -43,6 +43,8 @@ export const MIN_SETTLED_COST_USD = 1;
 export const NOT_RANKED_REASONS = {
   NOT_RANKED_YET: 'not_ranked_yet',
   NOT_ENOUGH_TRADES_IN_WINDOW: 'not_enough_trades_in_window',
+  /** A known trader agent of this type that is not a Pearl agent, so never ranked */
+  NOT_ELIGIBLE: 'not_eligible',
 } as const;
 export type NotRankedReason = (typeof NOT_RANKED_REASONS)[keyof typeof NOT_RANKED_REASONS];
 
@@ -50,6 +52,7 @@ export const NOT_RANKED_COPY: Record<NotRankedReason, string> = {
   not_ranked_yet: 'Not ranked yet. Keep your agent running. It gets ranked after enough trades.',
   not_enough_trades_in_window:
     "Not enough trades in this period. Try a different period to see your agent's rank.",
+  not_eligible: 'Not eligible. The leaderboard ranks agents run in Pearl only.',
 };
 
 export const LEADERBOARD_QUERY_PARAMS = {
