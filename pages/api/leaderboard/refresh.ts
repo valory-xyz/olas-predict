@@ -45,8 +45,13 @@ const handler = async (
       try {
         ({ snapshot, unresolvedServices } = await buildLeaderboard(agentType, state, deadline));
       } finally {
-        // The builder updates `state` as it goes, so keep what this run fetched even if it failed
-        await writeBuilderState(agentType, state);
+        // The builder updates `state` as it goes, so keep what this run fetched even if it failed.
+        // A failed save must not replace the build error pending from `try`.
+        try {
+          await writeBuilderState(agentType, state);
+        } catch (error) {
+          console.error(`Saving the ${agentType} leaderboard builder state failed`, error);
+        }
       }
       if (snapshot) await writeSnapshot(snapshot);
       return { status: snapshot ? ('updated' as const) : ('pending' as const), unresolvedServices };
