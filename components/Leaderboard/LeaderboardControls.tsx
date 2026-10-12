@@ -7,6 +7,7 @@ import {
   LEADERBOARD_WINDOWS,
   LEADERBOARD_WINDOW_LABELS,
   LeaderboardWindow,
+  RANK_BY,
   RankBy,
 } from 'constants/leaderboard';
 import { COLOR, MEDIA_QUERY } from 'constants/theme';
@@ -33,10 +34,10 @@ const WINDOW_OPTIONS = LEADERBOARD_WINDOWS.map((window) => ({
   value: window,
 }));
 
-const RANK_BY_OPTIONS = [
-  { label: 'ROI', value: 'roi' },
-  { label: 'PnL', value: 'pnl' },
-];
+// Keyed by `RankBy`, so a new criterion fails type-checking here until it gets a label
+const RANK_BY_LABELS: Record<RankBy, string> = { roi: 'ROI', pnl: 'PnL' };
+
+const RANK_BY_OPTIONS = RANK_BY.map((value) => ({ label: RANK_BY_LABELS[value], value }));
 
 type LeaderboardControlsProps = {
   agentType: AgentType;
@@ -82,11 +83,7 @@ export const LeaderboardControls = ({
     </Flex>
     <Flex gap={8} align="center">
       <Text type="secondary">🏆 Rank by</Text>
-      <Segmented<RankBy>
-        options={RANK_BY_OPTIONS as { label: string; value: RankBy }[]}
-        value={rankBy}
-        onChange={onRankByChange}
-      />
+      <Segmented<RankBy> options={RANK_BY_OPTIONS} value={rankBy} onChange={onRankByChange} />
     </Flex>
   </Flex>
 );
