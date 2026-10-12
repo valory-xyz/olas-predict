@@ -1,10 +1,14 @@
 /**
  * Pure window-metric calculations for the leaderboard.
  *
- * These mirror the trader agent's own Profile figures (`agent_performance_summary_abci`):
- * P&L follows its profit-over-time (`dailyProfit` minus mech fees attributed by
- * `_match_mech_requests_to_days`, summed per `_filter_profit_data_by_window`), and ROI is the
- * windowed form of its `partial_roi`, without staking rewards.
+ * P&L follows the trader agent's own profit-over-time (`agent_performance_summary_abci`):
+ * `dailyProfit` minus mech fees attributed by `_match_mech_requests_to_days`. Two deliberate
+ * differences from the agent's Profile:
+ * - Windows are N full UTC days ending today (see `getWindowStart`). The agent's
+ *   `_filter_profit_data_by_window` effectively drops the first of those days, so its figure for
+ *   the same period can differ.
+ * - ROI divides P&L by the gross buy cost of the markets settled in the window plus mech fees
+ *   (see `computeWindowMetrics`), not by the sources' settled cost, which is net of sells.
  */
 import type { LeaderboardMetrics } from 'types/leaderboard';
 
@@ -58,8 +62,9 @@ export const getDayStart = (timestamp: number) =>
   Math.floor(timestamp / SECONDS_PER_DAY) * SECONDS_PER_DAY;
 
 /**
- * Start of a window of `days` UTC days that includes today, matching the agent's
- * `now − (days − 1) × 86400` cutoff aligned to the `date` keys of daily statistics.
+ * Start of a window of `days` full UTC days that includes today: the UTC midnight
+ * `days − 1` days before today's, comparable with the `date` keys of daily statistics. This
+ * is intentionally not the trader's window rule, which leaves out the first of those days.
  */
 export const getWindowStart = (nowSeconds: number, days: number) =>
   getDayStart(nowSeconds) - (days - 1) * SECONDS_PER_DAY;
