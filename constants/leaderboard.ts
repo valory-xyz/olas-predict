@@ -34,12 +34,6 @@ export const LEADERBOARD_MAX_ADDRESSES = 50;
 
 /** An agent is ranked in a window only with at least this many settled bets there */
 export const MIN_SETTLED_BETS_PER_WINDOW = 5;
-/**
- * ... and at least this much settled cost there (the ROI denominator: gross buy cost of the
- * markets settled in the window plus mech fees, in USD), so ROI is not a ratio of dust
- */
-export const MIN_SETTLED_COST_USD = 1;
-
 export const NOT_RANKED_REASONS = {
   NOT_RANKED_YET: 'not_ranked_yet',
   NOT_ENOUGH_TRADES_IN_WINDOW: 'not_enough_trades_in_window',

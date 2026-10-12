@@ -8,7 +8,6 @@ import {
   type LeaderboardWindow,
   MECH_FEE_USD,
   MIN_SETTLED_BETS_PER_WINDOW,
-  MIN_SETTLED_COST_USD,
 } from 'constants/leaderboard';
 import type { LeaderboardSnapshot, SnapshotAgent, SnapshotWindowEntry } from 'types/leaderboard';
 import { generateAgentName } from 'utils/agentName';
@@ -84,10 +83,7 @@ export const computeSnapshot = ({
     const reasons = new Map(
       candidates.map((c) => [
         c.address,
-        getNotRankedReason(c, {
-          minSettledBets: MIN_SETTLED_BETS_PER_WINDOW,
-          minSettledCost: MIN_SETTLED_COST_USD,
-        }),
+        getNotRankedReason(c, { minSettledBets: MIN_SETTLED_BETS_PER_WINDOW }),
       ]),
     );
     const eligible = candidates.filter((c) => reasons.get(c.address) === null);

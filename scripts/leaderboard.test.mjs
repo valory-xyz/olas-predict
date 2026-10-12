@@ -2,11 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { INVALID_ANSWER_HEX } from '../constants/index.ts';
-import {
-  MECH_FEE_USD,
-  MIN_SETTLED_BETS_PER_WINDOW,
-  MIN_SETTLED_COST_USD,
-} from '../constants/leaderboard.ts';
+import { MECH_FEE_USD, MIN_SETTLED_BETS_PER_WINDOW } from '../constants/leaderboard.ts';
 import { generateAgentName } from '../utils/agentName.ts';
 import { computeSnapshot } from '../utils/leaderboard/compute.ts';
 import {
@@ -155,13 +151,9 @@ test('without a market buy cost, the day falls back to its non-negative settled 
   assert.equal(metricsFor(days, { tallies: { m1: [1, 1, 4] } }).settledCost, 13);
 });
 
-const RANK_RULE = {
-  minSettledBets: MIN_SETTLED_BETS_PER_WINDOW,
-  minSettledCost: MIN_SETTLED_COST_USD,
-};
+const RANK_RULE = { minSettledBets: MIN_SETTLED_BETS_PER_WINDOW };
 
-test('an agent needs a settled cost of at least the minimum to be ranked', () => {
-  assert.equal(MIN_SETTLED_COST_USD, 1);
+test('an agent needs a settled cost above zero to be ranked, however small', () => {
   const reason = (settledCost) =>
     getNotRankedReason(
       {
@@ -172,8 +164,8 @@ test('an agent needs a settled cost of at least the minimum to be ranked', () =>
       RANK_RULE,
     );
   assert.equal(reason(0), 'not_enough_trades_in_window');
-  assert.equal(reason(0.99), 'not_enough_trades_in_window');
-  assert.equal(reason(1), null);
+  assert.equal(reason(-1), 'not_enough_trades_in_window');
+  assert.equal(reason(0.01), null);
 });
 
 test('window bounds include the cutoff day and exclude the day before, for 7D and 1Y', () => {
