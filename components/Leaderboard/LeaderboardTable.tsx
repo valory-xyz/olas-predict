@@ -2,7 +2,7 @@ import { InfoCircleOutlined, PushpinFilled, PushpinOutlined } from '@ant-design/
 import { Button, Flex, Table, Tooltip, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import Link from 'next/link';
-import { ReactNode } from 'react';
+import { CSSProperties, ReactNode } from 'react';
 import Jazzicon, { jsNumberForAddress } from 'react-jazzicon';
 import styled, { keyframes } from 'styled-components';
 
@@ -33,6 +33,17 @@ const flash = keyframes`
 `;
 
 const StyledTable = styled(Table<LeaderboardRow>)`
+  /* The reason spans every metric column, wider than a phone: keep it next to the fixed
+     agent column and wrap it within the visible width, instead of right-aligning it off-screen */
+  .not-ranked-message {
+    display: block;
+    position: sticky;
+    left: var(--leaderboard-fixed-width);
+    max-width: calc(100vw - var(--leaderboard-fixed-width) - 64px);
+    text-align: left;
+    white-space: normal;
+  }
+
   .ant-table,
   .ant-table-container,
   .ant-table-summary {
@@ -145,13 +156,21 @@ type ColumnOptions = {
 const metricCell = (render: (row: LeaderboardRow) => ReactNode, isFirstMetric: boolean) => ({
   render: (_: unknown, row: LeaderboardRow) =>
     row.notRankedReason ? (
-      <Text type="secondary">{NOT_RANKED_COPY[row.notRankedReason]}</Text>
+      <Text type="secondary" className="not-ranked-message">
+        {NOT_RANKED_COPY[row.notRankedReason]}
+      </Text>
     ) : (
       render(row)
     ),
   onCell: (row: LeaderboardRow) =>
     row.notRankedReason ? { colSpan: isFirstMetric ? METRIC_COLUMN_COUNT : 0 } : {},
 });
+
+/** Width of the columns fixed on the left (pin, rank, agent) */
+const getFixedWidth = (isMobile: boolean) => {
+  const { pin, rank, agent } = getWidths(isMobile);
+  return pin + rank + agent;
+};
 
 /** Column widths, so that all columns fit a 1440px screen and the agent stays in view on mobile */
 const getWidths = (isMobile: boolean) => ({
@@ -338,6 +357,11 @@ export const LeaderboardTable = ({
         pagination={false}
         size="middle"
         sticky
+        style={
+          {
+            '--leaderboard-fixed-width': `${getFixedWidth(isMobile)}px`,
+          } as CSSProperties
+        }
         scroll={{ x: getScrollWidth(isMobile) }}
         tableLayout="fixed"
         locale={{
