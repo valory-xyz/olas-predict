@@ -49,8 +49,8 @@ const getRows = (snapshot: LeaderboardSnapshot, window: LeaderboardWindow, rankB
 };
 
 /**
- * The rows for one page of the list: without a search, the ranked agents only; with a search,
- * the matching agents, ranked ones first with their rank in the full leaderboard.
+ * The rows for one page of the list: the ranked agents, in rank order, narrowed to the names
+ * matching `search` when set (each keeps its rank in the full leaderboard).
  */
 export const getLeaderboardPage = ({
   snapshot,
@@ -68,7 +68,8 @@ export const getLeaderboardPage = ({
   limit: number;
 }) => {
   const rows = getRows(snapshot, window, rankBy);
-  const results = search ? searchByName(rows, search) : rows.filter((row) => row.rank !== null);
+  const ranked = rows.filter((row) => row.rank !== null);
+  const results = search ? searchByName(ranked, search) : ranked;
   return { totalResults: results.length, agents: results.slice(offset, offset + limit) };
 };
 

@@ -17,7 +17,15 @@ import {
   tallyOmenBets,
   tallyPolymarketBets,
 } from '../utils/leaderboard/metrics.ts';
-import { getLeaderboardUrl, parseAddress } from '../utils/leaderboard/params.ts';
+import {
+  findRepeatedParam,
+  getLeaderboardUrl,
+  parseAddress,
+  parseAgentType,
+  parseInteger,
+  parseRankBy,
+  parseWindow,
+} from '../utils/leaderboard/params.ts';
 import {
   PEARL_LOOKUP_MAX_FAILURES,
   PEARL_LOOKUP_RETRY_MS,
@@ -31,6 +39,7 @@ import {
 } from '../utils/leaderboard/pearl.ts';
 import { assignRanks, getNotRankedReason, searchByName } from '../utils/leaderboard/ranking.ts';
 import { isCronAuthorized } from '../utils/leaderboard/respond.ts';
+import { isValidSnapshot } from '../utils/leaderboard/validate.ts';
 import { getAgentRecords, getLeaderboardPage } from '../utils/leaderboard/views.ts';
 
 const DAY = SECONDS_PER_DAY;
@@ -461,8 +470,8 @@ test('the list holds ranked agents only, in order of the selected criterion', ()
   );
 });
 
-test('search lists not-ranked matches after ranked ones, with a null rank', () => {
-  const { agents } = getLeaderboardPage({
+test('search lists only ranked matches, with their rank in the full leaderboard', () => {
+  const { agents, totalResults } = getLeaderboardPage({
     snapshot,
     window: '7d',
     rankBy: 'roi',
@@ -471,12 +480,46 @@ test('search lists not-ranked matches after ranked ones, with a null rank', () =
     limit: 30,
   });
   assert.deepEqual(
-    agents.map((row) => [row.address, row.rank, row.notRankedReason]),
-    [
-      ['0x1', 2, null],
-      ['0x3', null, 'not_enough_trades_in_window'],
-    ],
+    agents.map((row) => [row.address, row.rank]),
+    [['0x1', 2]],
   );
+  assert.equal(totalResults, 1);
+});
+
+test('a snapshot read back must have the expected shape and agent type', () => {
+  assert.equal(isValidSnapshot(snapshot, 'omenstrat'), true);
+  assert.equal(isValidSnapshot(snapshot, 'polystrat'), false);
+  assert.equal(isValidSnapshot({ ...snapshot, schemaVersion: 2 }, 'omenstrat'), false);
+  assert.equal(isValidSnapshot({ ...snapshot, agents: null }, 'omenstrat'), false);
+  assert.equal(isValidSnapshot({ ...snapshot, totalRanked: { '7d': 1 } }, 'omenstrat'), false);
+  const windows = { ...snapshot.agents[0].windows };
+  delete windows['1y'];
+  assert.equal(
+    isValidSnapshot({ ...snapshot, agents: [{ ...snapshot.agents[0], windows }] }, 'omenstrat'),
+    false,
+  );
+  assert.equal(isValidSnapshot({ ...snapshot, excluded: 'x' }, 'omenstrat'), false);
+  assert.equal(isValidSnapshot({ ...snapshot, excluded: undefined }, 'omenstrat'), true);
+  assert.equal(isValidSnapshot(null, 'omenstrat'), false);
+});
+
+test('query parameters: case-insensitive options, strict integers, repeated values', () => {
+  assert.equal(parseAgentType('PolyStrat'), 'polystrat');
+  assert.equal(parseRankBy('PNL'), 'pnl');
+  assert.equal(parseWindow('1Y'), '1y');
+  assert.equal(parseWindow('2y'), null);
+  assert.equal(parseInteger(undefined, 30), 30);
+  assert.equal(parseInteger('0', 30), 0);
+  assert.equal(parseInteger('25', 30), 25);
+  for (const bad of ['002', '-1', '1.5', '', ' 1', '1e3', '9999999999']) {
+    assert.equal(parseInteger(bad, 30), null, bad);
+  }
+  assert.equal(parseInteger(['1', '2'], 30), null);
+  assert.equal(
+    findRepeatedParam({ window: '7d', search: ['a', 'b'] }, ['window', 'search']),
+    'search',
+  );
+  assert.equal(findRepeatedParam({ window: '7d', other: ['a', 'b'] }, ['window']), null);
 });
 
 test('per-address records keep request order and mark unknown Safes not ranked yet', () => {

@@ -6,17 +6,16 @@
 import { BlobNotFoundError, head, put } from '@vercel/blob';
 
 import { AgentType } from 'constants/index';
-import {
-  LEADERBOARD_BLOB_PREFIX,
-  LEADERBOARD_SNAPSHOT_SCHEMA_VERSION,
-  LEADERBOARD_STATE_SCHEMA_VERSION,
-} from 'constants/leaderboard';
+import { LEADERBOARD_BLOB_PREFIX, LEADERBOARD_STATE_SCHEMA_VERSION } from 'constants/leaderboard';
 import type { LeaderboardSnapshot } from 'types/leaderboard';
 
 import type { PearlLookup } from './pearl';
+import { isValidSnapshot } from './validate';
 
 /** How long a warm function trusts its in-memory snapshot before checking Blob again */
 const SNAPSHOT_MEMO_TTL_MS = 60_000;
+/** After a failed read, how soon the last good snapshot is checked against Blob again */
+const SNAPSHOT_RETRY_MS = 10_000;
 /** Shortest edge cache Blob allows, so a rewritten snapshot is visible within a minute */
 const BLOB_CACHE_MAX_AGE_SECONDS = 60;
 
@@ -93,29 +92,63 @@ type MemoEntry = {
   snapshot: LeaderboardSnapshot | null;
   uploadedAt: string | null;
   checkedAt: number;
+  /** The last read failed, so `snapshot` is the last good one */
+  isStale: boolean;
 };
 const snapshotMemo = new Map<AgentType, MemoEntry>();
 
+export type SnapshotRead = {
+  /** `null` when no snapshot exists yet */
+  snapshot: LeaderboardSnapshot | null;
+  /** Blob could not be read (or held an invalid snapshot): this is the last good snapshot */
+  isStale: boolean;
+};
+
 /**
- * The current snapshot for an agent type, or `null` when none exists yet or it has an unknown
- * schema version. Memoized per warm function and only re-downloaded when Blob has a newer one.
- * Throws when Blob cannot be read.
+ * The current snapshot for an agent type. Memoized per warm function and only re-downloaded
+ * when Blob has a newer one; `minUpdatedAt` skips the memo when it is older than that (a client
+ * already saw a newer snapshot on another instance).
+ *
+ * A snapshot that fails validation (wrong shape, schema version or agent type) counts as a
+ * failed read. When a read fails, the last good snapshot this function holds is served, marked
+ * stale, and Blob is checked again shortly; without one, the error is thrown.
  */
-export const readSnapshot = async (agentType: AgentType): Promise<LeaderboardSnapshot | null> => {
+export const readSnapshot = async (
+  agentType: AgentType,
+  { minUpdatedAt }: { minUpdatedAt?: string } = {},
+): Promise<SnapshotRead> => {
   const memo = snapshotMemo.get(agentType);
-  if (memo && Date.now() - memo.checkedAt < SNAPSHOT_MEMO_TTL_MS) return memo.snapshot;
-
-  const blob = await headBlob(getSnapshotPath(agentType));
-  const uploadedAt = blob ? blob.uploadedAt.toISOString() : null;
-
-  if (memo && uploadedAt !== null && memo.uploadedAt === uploadedAt) {
-    memo.checkedAt = Date.now();
-    return memo.snapshot;
+  const isMemoOlder = !!minUpdatedAt && !!memo?.snapshot && memo.snapshot.updatedAt < minUpdatedAt;
+  if (memo && !isMemoOlder && Date.now() - memo.checkedAt < SNAPSHOT_MEMO_TTL_MS) {
+    return { snapshot: memo.snapshot, isStale: memo.isStale };
   }
 
-  const data =
-    blob && uploadedAt ? await fetchBlobJson<LeaderboardSnapshot>(blob.url, uploadedAt) : null;
-  const snapshot = data?.schemaVersion === LEADERBOARD_SNAPSHOT_SCHEMA_VERSION ? data : null;
-  snapshotMemo.set(agentType, { snapshot, uploadedAt, checkedAt: Date.now() });
-  return snapshot;
+  try {
+    const blob = await headBlob(getSnapshotPath(agentType));
+    const uploadedAt = blob ? blob.uploadedAt.toISOString() : null;
+
+    if (memo && uploadedAt !== null && memo.uploadedAt === uploadedAt) {
+      Object.assign(memo, { checkedAt: Date.now(), isStale: false });
+      return { snapshot: memo.snapshot, isStale: false };
+    }
+
+    let snapshot: LeaderboardSnapshot | null = null;
+    if (blob && uploadedAt) {
+      const data = await fetchBlobJson<unknown>(blob.url, uploadedAt);
+      if (!isValidSnapshot(data, agentType)) {
+        throw new Error(`Invalid ${agentType} snapshot uploaded at ${uploadedAt}`);
+      }
+      snapshot = data;
+    }
+    snapshotMemo.set(agentType, { snapshot, uploadedAt, checkedAt: Date.now(), isStale: false });
+    return { snapshot, isStale: false };
+  } catch (error) {
+    if (!memo?.snapshot) throw error;
+    console.error(`Leaderboard: ${agentType} snapshot read failed, serving the last good`, error);
+    Object.assign(memo, {
+      checkedAt: Date.now() - SNAPSHOT_MEMO_TTL_MS + SNAPSHOT_RETRY_MS,
+      isStale: true,
+    });
+    return { snapshot: memo.snapshot, isStale: true };
+  }
 };

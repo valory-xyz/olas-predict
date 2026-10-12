@@ -7,30 +7,39 @@ import {
   LEADERBOARD_PAGE_SIZE,
 } from 'constants/leaderboard';
 import type { LeaderboardErrorResponse, LeaderboardListResponse } from 'types/leaderboard';
-import { parseAgentType, parseRankBy, parseWindow } from 'utils/leaderboard/params';
+import {
+  findRepeatedParam,
+  parseAgentType,
+  parseInteger,
+  parseRankBy,
+  parseWindow,
+} from 'utils/leaderboard/params';
 import { normalizeSearch } from 'utils/leaderboard/ranking';
 import {
   sendBadRequest,
   sendMethodNotAllowed,
+  sendSnapshotChanged,
   sendUnavailable,
   setSuccessCacheHeaders,
 } from 'utils/leaderboard/respond';
 import { readSnapshot } from 'utils/leaderboard/snapshot';
 import { getLeaderboardPage } from 'utils/leaderboard/views';
 
-/** A non-negative integer query parameter, `fallback` when absent, `null` when malformed */
-const parseInteger = (value: string | string[] | undefined, fallback: number) => {
-  if (value === undefined) return fallback;
-  if (typeof value !== 'string' || !/^\d+$/.test(value)) return null;
-  return Number(value);
-};
+const PARAMS = ['agentType', 'rankBy', 'window', 'offset', 'limit', 'search', 'snapshot'] as const;
 
-/** Public: the ranked list for one agent type, criterion and window, paged, with name search */
+/**
+ * Public: the ranked list for one agent type, criterion and window, paged, with name search.
+ * Later pages pass the first page's `updatedAt` as `snapshot`; once that snapshot has been
+ * replaced the route answers `409` with the current `updatedAt`, so pages never mix snapshots.
+ */
 const handler = async (
   req: NextApiRequest,
   res: NextApiResponse<LeaderboardListResponse | LeaderboardErrorResponse>,
 ) => {
   if (req.method !== 'GET') return sendMethodNotAllowed(res);
+
+  const repeated = findRepeatedParam(req.query, PARAMS);
+  if (repeated) return sendBadRequest(res, `Repeated query parameter: ${repeated}`);
 
   const { agentType: agentTypeParam, rankBy: rankByParam, window: windowParam } = req.query;
   const agentType = parseAgentType(agentTypeParam);
@@ -45,19 +54,25 @@ const handler = async (
   if (limit === null || limit < 1 || limit > LEADERBOARD_MAX_LIMIT) {
     return sendBadRequest(res, `Invalid limit: must be from 1 to ${LEADERBOARD_MAX_LIMIT}`);
   }
-  const search = normalizeSearch(typeof req.query.search === 'string' ? req.query.search : '');
+  const search = normalizeSearch(req.query.search as string | undefined);
+  const expectedSnapshot = req.query.snapshot as string | undefined;
+  if (expectedSnapshot === '') return sendBadRequest(res, 'Invalid snapshot');
 
-  let snapshot;
+  let read;
   try {
-    snapshot = await readSnapshot(agentType);
+    read = await readSnapshot(agentType, { minUpdatedAt: expectedSnapshot });
   } catch (error) {
     console.error('Leaderboard: snapshot read failed', error);
     return sendUnavailable(res);
   }
+  const { snapshot, isStale } = read;
   if (!snapshot) return sendUnavailable(res);
+  if (expectedSnapshot !== undefined && expectedSnapshot !== snapshot.updatedAt) {
+    return sendSnapshotChanged(res, snapshot.updatedAt);
+  }
 
   const page = getLeaderboardPage({ snapshot, window, rankBy, search, offset, limit });
-  setSuccessCacheHeaders(res);
+  setSuccessCacheHeaders(res, 'list', isStale);
   return res.status(200).json({
     agentType,
     rankBy,

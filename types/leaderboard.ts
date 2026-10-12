@@ -90,7 +90,11 @@ export type LeaderboardAgentsResponse = {
   agents: LeaderboardAgentRecord[];
 };
 
-export type LeaderboardErrorResponse = { error: string };
+export type LeaderboardErrorResponse = {
+  error: string;
+  /** On `409`: the current snapshot, to start over from */
+  updatedAt?: string;
+};
 
 export type PinnedAgent = {
   address: string;

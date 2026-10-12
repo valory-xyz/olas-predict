@@ -14,28 +14,41 @@ import {
 
 type QueryValue = string | string[] | undefined;
 
+/** The page takes the first of repeated values; the API routes reject them (`findRepeatedParam`) */
 const single = (value: QueryValue) => (Array.isArray(value) ? value[0] : value);
 
-export const parseAgentType = (value: QueryValue): AgentType | null => {
-  const candidate = single(value);
-  return LEADERBOARD_AGENT_TYPES.find((type) => type === candidate) ?? null;
+/** Case-insensitive match against a list of lower-case values */
+const parseOption = <T extends string>(options: readonly T[], value: QueryValue): T | null => {
+  const candidate = single(value)?.trim().toLowerCase();
+  return options.find((option) => option === candidate) ?? null;
 };
 
-export const parseWindow = (value: QueryValue): LeaderboardWindow | null => {
-  const candidate = single(value);
-  return LEADERBOARD_WINDOWS.find((window) => window === candidate) ?? null;
-};
+export const parseAgentType = (value: QueryValue): AgentType | null =>
+  parseOption(LEADERBOARD_AGENT_TYPES, value);
 
-export const parseRankBy = (value: QueryValue): RankBy | null => {
-  const candidate = single(value);
-  return RANK_BY.find((rankBy) => rankBy === candidate) ?? null;
-};
+export const parseWindow = (value: QueryValue): LeaderboardWindow | null =>
+  parseOption(LEADERBOARD_WINDOWS, value);
+
+export const parseRankBy = (value: QueryValue): RankBy | null => parseOption(RANK_BY, value);
 
 /** A lowercased Safe address, or `null` when the value is not an address */
 export const parseAddress = (value: QueryValue): string | null => {
   const candidate = single(value)?.trim();
   return candidate && isAddress(candidate, { strict: false }) ? candidate.toLowerCase() : null;
 };
+
+/** A non-negative integer without leading zeros, `fallback` when absent, `null` when malformed */
+export const parseInteger = (value: QueryValue, fallback: number): number | null => {
+  if (value === undefined) return fallback;
+  if (typeof value !== 'string' || !/^(0|[1-9]\d{0,8})$/.test(value)) return null;
+  return Number(value);
+};
+
+/** The first of `names` given more than once in the query, if any */
+export const findRepeatedParam = (
+  query: Partial<Record<string, QueryValue>>,
+  names: readonly string[],
+): string | null => names.find((name) => Array.isArray(query[name])) ?? null;
 
 /** The "See full leaderboard" deep link: this agent type, ranked by ROI, this window, pinned */
 export const getLeaderboardUrl = (agentType: AgentType, window: LeaderboardWindow, pin: string) => {
