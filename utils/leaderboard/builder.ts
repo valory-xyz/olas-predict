@@ -58,7 +58,7 @@ const updatePearlFlags = async (
     const batch = unknown.slice(i, i + SERVICE_METADATA_BATCH);
     const metadata = await fetchServiceMetadata(agentType, batch);
     metadata.forEach((value, id) => {
-      state.pearl[id] = isPearlAgent(value);
+      state.pearl[id] = isPearlAgent(agentType, value);
     });
   }
   return true;

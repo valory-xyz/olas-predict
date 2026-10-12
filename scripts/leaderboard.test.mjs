@@ -14,7 +14,7 @@ import {
   tallyPolymarketBets,
 } from '../utils/leaderboard/metrics.ts';
 import { getLeaderboardUrl, parseAddress } from '../utils/leaderboard/params.ts';
-import { isPearlAgent } from '../utils/leaderboard/pearl.ts';
+import { classifyService, isPearlAgent } from '../utils/leaderboard/pearl.ts';
 import { assignRanks, getNotRankedReason, searchByName } from '../utils/leaderboard/ranking.ts';
 import { isCronAuthorized } from '../utils/leaderboard/respond.ts';
 import { getAgentRecords, getLeaderboardPage } from '../utils/leaderboard/views.ts';
@@ -222,12 +222,45 @@ test('search is a case-insensitive substring match, ranked matches first', () =>
   assert.deepEqual(searchByName(rows, 'nomatch'), []);
 });
 
-test('the Pearl filter needs a description starting with [Pearl service]', () => {
-  assert.equal(isPearlAgent({ description: '[Pearl service] valory/trader_pearl' }), true);
-  assert.equal(isPearlAgent({ description: 'Trader agent for omen prediction markets' }), false);
-  assert.equal(isPearlAgent({ description: 'x [Pearl service]' }), false);
-  assert.equal(isPearlAgent({}), false);
-  assert.equal(isPearlAgent(null), false);
+test('the Pearl filter needs the trader package name and the [Pearl service] prefix', () => {
+  const pearlOmen = {
+    name: 'service/valory/trader_pearl/0.1.0',
+    description: '[Pearl service] valory/trader_pearl',
+  };
+  assert.equal(isPearlAgent('omenstrat', pearlOmen), true);
+  assert.equal(
+    isPearlAgent('polystrat', {
+      name: 'service/valory/polymarket_trader/0.1.0',
+      description: '[Pearl service] Trader agent for polymarket prediction markets',
+    }),
+    true,
+  );
+  // The package is per chain
+  assert.equal(isPearlAgent('polystrat', pearlOmen), false);
+  // Quickstart deploys the same package without the prefix
+  assert.equal(
+    isPearlAgent('omenstrat', {
+      name: 'service/valory/trader_pearl/0.1.0',
+      description: 'Trader agent for omen prediction markets',
+    }),
+    false,
+  );
+  // Other Pearl agents carry the prefix too
+  assert.equal(
+    isPearlAgent('omenstrat', {
+      name: 'service/valory/connect/0.1.0',
+      description: '[Pearl service] An agent that provides ...',
+    }),
+    false,
+  );
+  assert.equal(
+    isPearlAgent('omenstrat', { ...pearlOmen, name: 'service/valory/trader_pearl_x/0.1.0' }),
+    false,
+  );
+  assert.equal(isPearlAgent('omenstrat', { ...pearlOmen, description: 'x [Pearl service]' }), false);
+  assert.equal(classifyService('omenstrat', {}), 'malformed');
+  assert.equal(classifyService('omenstrat', null), 'malformed');
+  assert.equal(classifyService('omenstrat', { name: 'a', description: 'b' }), 'other');
 });
 
 test("agent names match Pearl's generateAgentName", () => {

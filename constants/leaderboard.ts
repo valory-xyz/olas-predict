@@ -80,6 +80,13 @@ export const SERVICE_REGISTRY_ADDRESSES: Record<number, Address> = {
 /** The description prefix Pearl's service templates write into the service metadata */
 export const PEARL_SERVICE_DESCRIPTION_PREFIX = '[Pearl service]';
 
+/** The trader's service package per agent type: the `name` in its service metadata */
+export const PEARL_TRADER_SERVICE_PACKAGES: Record<AgentType, string> = {
+  omenstrat: 'service/valory/trader_pearl',
+  polystrat: 'service/valory/polymarket_trader',
+};
+
 export const LEADERBOARD_BLOB_PREFIX = 'leaderboard';
 export const LEADERBOARD_SNAPSHOT_SCHEMA_VERSION = 1;
-export const LEADERBOARD_STATE_SCHEMA_VERSION = 1;
+// 2: Pearl flags re-evaluated with the trader package name
+export const LEADERBOARD_STATE_SCHEMA_VERSION = 2;
