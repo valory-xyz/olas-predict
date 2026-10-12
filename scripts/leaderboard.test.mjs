@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { INVALID_ANSWER_HEX } from '../constants/index.ts';
-import { MECH_FEE_USD, MIN_SETTLED_BETS_PER_WINDOW } from '../constants/leaderboard.ts';
+import {
+  MECH_FEE_USD,
+  MIN_SETTLED_BETS_PER_WINDOW,
+  MIN_SETTLED_COST_USD,
+} from '../constants/leaderboard.ts';
 import { generateAgentName } from '../utils/agentName.ts';
 import { computeSnapshot } from '../utils/leaderboard/compute.ts';
 import {
@@ -91,23 +95,56 @@ test('P&L is the window sum of daily profit minus attributed mech fees', () => {
   assert.equal(metrics.pnl, 3 - 2 * MECH_FEE_USD);
 });
 
-test('ROI divides P&L by settled cost: traded, fees and mech fees', () => {
-  const omen = metricsFor([day(TODAY, { profit: 2, tradedSettled: 8, feesSettled: 2 })]);
-  assert.equal(omen.settledCost, 10);
-  assert.equal(omen.roi, 0.2);
-
-  // The Polymarket source has no fees, so they are 0
-  const polymarket = metricsFor([day(TODAY, { profit: 2, tradedSettled: 8 })]);
-  assert.equal(polymarket.roi, 0.25);
+test('ROI divides P&L by the gross buy cost of the settled markets plus mech fees', () => {
+  // The agent bought for 10 (fees included) and sold part before settlement: the source's
+  // settled cost is net of the sale
+  const days = [day(TODAY, { profit: 2, tradedSettled: -3, feesSettled: 0.1, markets: ['m1'] })];
+  const metrics = metricsFor(days, {
+    tallies: { m1: [1, 1, 10] },
+    requests: [{ titleKey: 't1', timestamp: TODAY - DAY }],
+    titles: { m1: 't1' },
+  });
+  assert.equal(metrics.settledCost, 10 + MECH_FEE_USD);
+  assert.equal(metrics.roi, (2 - MECH_FEE_USD) / (10 + MECH_FEE_USD));
 });
 
-test('an agent with zero settled cost is not ranked', () => {
-  const metrics = metricsFor([day(TODAY, { brierCount: 6, brierSum: 1 })]);
-  assert.equal(metrics.settledCost, 0);
-  assert.equal(
-    getNotRankedReason({ address: '0x1', metrics, hasSettledActivity: true }, 5),
-    'not_enough_trades_in_window',
-  );
+test('a market settled on two days adds its buy cost once, on its last day', () => {
+  const days = [
+    day(TODAY - DAY, { tradedSettled: 4, markets: ['m1'] }),
+    day(TODAY, { tradedSettled: 6, markets: ['m1'] }),
+  ];
+  assert.equal(metricsFor(days, { tallies: { m1: [1, 1, 10] } }).settledCost, 10);
+});
+
+test('without a market buy cost, the day falls back to its non-negative settled cost', () => {
+  const days = [
+    day(TODAY, { tradedSettled: 8, feesSettled: 2, markets: ['m1', 'm2'] }),
+    day(TODAY - DAY, { tradedSettled: -5, markets: ['m3'] }),
+    day(TODAY - 2 * DAY, { tradedSettled: 3 }),
+  ];
+  // m1 known (4), m2 unknown: max(4, 8 + 2); m3 unknown and net negative: 0; no markets: 3
+  assert.equal(metricsFor(days, { tallies: { m1: [1, 1, 4] } }).settledCost, 13);
+});
+
+const RANK_RULE = {
+  minSettledBets: MIN_SETTLED_BETS_PER_WINDOW,
+  minSettledCost: MIN_SETTLED_COST_USD,
+};
+
+test('an agent needs a settled cost of at least the minimum to be ranked', () => {
+  assert.equal(MIN_SETTLED_COST_USD, 1);
+  const reason = (settledCost) =>
+    getNotRankedReason(
+      {
+        address: '0x1',
+        hasSettledActivity: true,
+        metrics: { roi: 0, pnl: 0, trades: 6, settledBets: 6, settledCost },
+      },
+      RANK_RULE,
+    );
+  assert.equal(reason(0), 'not_enough_trades_in_window');
+  assert.equal(reason(0.99), 'not_enough_trades_in_window');
+  assert.equal(reason(1), null);
 });
 
 test('window bounds include the cutoff day and exclude the day before, for 7D and 1Y', () => {
@@ -143,7 +180,7 @@ test('Brier score is the window sum over the settled bet count, or null without 
 test('accuracy sums the tallies of markets settled in the window', () => {
   const metrics = metricsFor(
     [day(TODAY, { markets: ['m1', 'm2'] }), day(TODAY - 30 * DAY, { markets: ['m3'] })],
-    { tallies: { m1: [1, 2], m2: [2, 2], m3: [0, 5] } },
+    { tallies: { m1: [1, 2, 1], m2: [2, 2, 1], m3: [0, 5, 1] } },
   );
   assert.equal(metrics.accuracy, 0.75);
   assert.equal(metricsFor([day(TODAY, { markets: ['m9'] })]).accuracy, null);
@@ -154,7 +191,7 @@ test('a market settled on two days counts towards accuracy once, on its last day
     day(TODAY - 2 * DAY, { markets: ['m1'] }),
     day(TODAY - DAY, { markets: ['m1', 'm2'] }),
   ];
-  const tallies = { m1: [1, 1], m2: [0, 1] };
+  const tallies = { m1: [1, 1, 1], m2: [0, 1, 1] };
   assert.equal(metricsFor(days, { tallies }).accuracy, 0.5);
 });
 
@@ -184,16 +221,16 @@ test('Polymarket tallies skip unresolved and invalid (winningIndex < 0) question
 const candidate = (address, settledBets, { roi = 0, pnl = 0, trades = 0, active = true } = {}) => ({
   address,
   hasSettledActivity: active,
-  metrics: { roi, pnl, trades, settledBets, settledCost: 1 },
+  metrics: { roi, pnl, trades, settledBets, settledCost: 10 },
 });
 
 test('not-ranked reasons follow lifetime activity and settled bets in the window', () => {
-  const min = MIN_SETTLED_BETS_PER_WINDOW;
-  assert.equal(min, 5);
-  assert.equal(getNotRankedReason(candidate('a', 0, { active: false }), min), 'not_ranked_yet');
-  assert.equal(getNotRankedReason(candidate('a', 0), min), 'not_enough_trades_in_window');
-  assert.equal(getNotRankedReason(candidate('a', 4), min), 'not_enough_trades_in_window');
-  assert.equal(getNotRankedReason(candidate('a', 5), min), null);
+  assert.equal(MIN_SETTLED_BETS_PER_WINDOW, 5);
+  const reason = (c) => getNotRankedReason(c, RANK_RULE);
+  assert.equal(reason(candidate('a', 0, { active: false })), 'not_ranked_yet');
+  assert.equal(reason(candidate('a', 0)), 'not_enough_trades_in_window');
+  assert.equal(reason(candidate('a', 4)), 'not_enough_trades_in_window');
+  assert.equal(reason(candidate('a', 5)), null);
 });
 
 test('ranks are highest first, ties broken by trades then address', () => {
@@ -266,7 +303,10 @@ test('the Pearl filter needs the trader package name and the [Pearl service] pre
     isPearlAgent('omenstrat', { ...pearlOmen, name: 'service/valory/trader_pearl_x/0.1.0' }),
     false,
   );
-  assert.equal(isPearlAgent('omenstrat', { ...pearlOmen, description: 'x [Pearl service]' }), false);
+  assert.equal(
+    isPearlAgent('omenstrat', { ...pearlOmen, description: 'x [Pearl service]' }),
+    false,
+  );
   assert.equal(classifyService('omenstrat', {}), 'malformed');
   assert.equal(classifyService('omenstrat', null), 'malformed');
   assert.equal(classifyService('omenstrat', { name: 'a', description: 'b' }), 'other');
@@ -400,10 +440,19 @@ test('per-address records keep request order and mark unknown Safes not ranked y
 test('computeSnapshot ranks each window and nulls metrics of agents not ranked there', () => {
   // Five settled bets today: ranked in every window
   const settledToday = (profit) =>
-    day(TODAY, { profit, tradedSettled: 10, brierCount: 5, brierSum: 1, bets: 5, traded: 10 });
+    day(TODAY, {
+      profit,
+      tradedSettled: 10,
+      brierCount: 5,
+      brierSum: 1,
+      bets: 5,
+      traded: 10,
+      markets: ['m1'],
+    });
+  const tallies = { m1: [1, 1, 10] };
   const agents = [
-    { address: '0xa', serviceId: '592', days: [settledToday(1)], requests: [], tallies: {} },
-    { address: '0xb', serviceId: '1549', days: [settledToday(3)], requests: [], tallies: {} },
+    { address: '0xa', serviceId: '592', days: [settledToday(1)], requests: [], tallies },
+    { address: '0xb', serviceId: '1549', days: [settledToday(3)], requests: [], tallies },
     // Settled activity only 40 days ago: ranked in 90D and 1Y only
     {
       address: '0xc',

@@ -425,38 +425,62 @@ export const fetchPolymarketQuestions = async (
   return questions;
 };
 
-/** The outcome index of each of the agent's bets, by market id, for the given markets */
-export const fetchBetOutcomes = async (
+export type MarketBets = {
+  /** Outcome index of each of the agent's bets */
+  outcomeIndexes: number[];
+  /** What the agent paid for its buys, fees included, in USD; sells are left out */
+  buyCost: number;
+};
+
+/** The agent's bets by market id, for the given markets */
+export const fetchMarketBets = async (
   agentType: AgentType,
   bettor: string,
   marketIds: string[],
-): Promise<Map<string, number[]>> => {
-  const outcomes = new Map<string, number[]>();
-  const add = (marketId: string, outcomeIndex: string) => {
+): Promise<Map<string, MarketBets>> => {
+  const decimals = TOKEN_DECIMALS[agentType];
+  const bets = new Map<string, MarketBets>();
+  const add = (marketId: string, outcomeIndex: string, amount: string, feeAmount?: string) => {
     const key = marketId.toLowerCase();
-    const list = outcomes.get(key);
-    if (list) list.push(Number(outcomeIndex));
-    else outcomes.set(key, [Number(outcomeIndex)]);
+    let entry = bets.get(key);
+    if (!entry) {
+      entry = { outcomeIndexes: [], buyCost: 0 };
+      bets.set(key, entry);
+    }
+    entry.outcomeIndexes.push(Number(outcomeIndex));
+    // A sell is a bet with a negative amount (its proceeds)
+    if (BigInt(amount) > BigInt(0)) {
+      entry.buyCost += toUnits(amount, decimals) + toUnits(feeAmount ?? '0', decimals);
+    }
   };
 
   for (const markets of chunk(marketIds, IN_FILTER_CHUNK)) {
     for (let skip = 0; ; skip += PAGE_SIZE) {
       if (agentType === AGENTS.OMENSTRAT) {
         const page = await request<{
-          bets: { outcomeIndex: string; fixedProductMarketMaker: { id: string } }[];
+          bets: {
+            outcomeIndex: string;
+            amount: string;
+            feeAmount: string;
+            fixedProductMarketMaker: { id: string };
+          }[];
         }>(PREDICT_OMEN_SUBGRAPH_URL, leaderboardOmenBetsQuery, { bettor, markets, skip });
-        page.bets.forEach((bet) => add(bet.fixedProductMarketMaker.id, bet.outcomeIndex));
+        page.bets.forEach((bet) =>
+          add(bet.fixedProductMarketMaker.id, bet.outcomeIndex, bet.amount, bet.feeAmount),
+        );
         if (page.bets.length < PAGE_SIZE) break;
       } else {
-        const page = await request<{ bets: { outcomeIndex: string; questionId: string }[] }>(
-          POLYMARKET_SQUID_URL,
-          leaderboardPolymarketBetsQuery,
-          { bettor, questions: markets, offset: skip },
-        );
-        page.bets.forEach((bet) => add(bet.questionId, bet.outcomeIndex));
+        const page = await request<{
+          bets: { outcomeIndex: string; amount: string; questionId: string }[];
+        }>(POLYMARKET_SQUID_URL, leaderboardPolymarketBetsQuery, {
+          bettor,
+          questions: markets,
+          offset: skip,
+        });
+        page.bets.forEach((bet) => add(bet.questionId, bet.outcomeIndex, bet.amount));
         if (page.bets.length < PAGE_SIZE) break;
       }
     }
   }
-  return outcomes;
+  return bets;
 };

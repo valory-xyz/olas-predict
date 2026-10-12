@@ -24,8 +24,8 @@ export type BuilderState = {
   pearl: Record<string, boolean>;
   /** Per agent: mech requests as [title key, timestamp], and the newest timestamp fetched */
   mech: Record<string, { syncedTo: number; requests: [string, number][] }>;
-  /** Per agent: [won, counted] bets per market with a final answer */
-  tallies: Record<string, Record<string, [number, number]>>;
+  /** Per agent: [won, counted bets, buy cost in USD] per market with a final answer */
+  tallies: Record<string, Record<string, [number, number, number]>>;
   /** Polymarket question id -> title key (Omen titles come with the daily statistics) */
   titles: Record<string, string>;
 };

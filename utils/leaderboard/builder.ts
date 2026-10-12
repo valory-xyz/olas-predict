@@ -17,8 +17,8 @@ import {
 import { isPearlAgent } from './pearl';
 import type { BuilderState } from './snapshot';
 import {
-  fetchBetOutcomes,
   fetchDailyStatistics,
+  fetchMarketBets,
   fetchMechRequests,
   fetchOmenMarketAnswers,
   fetchPolymarketQuestions,
@@ -142,11 +142,12 @@ const updateTallies = async (
       if (isPastDeadline(deadline)) return false;
       const finalMarkets = pending.filter(isFinal);
       if (!finalMarkets.length) return true;
-      const outcomes = await fetchBetOutcomes(agentType, address, finalMarkets);
+      const bets = await fetchMarketBets(agentType, address, finalMarkets);
       const tallied = (state.tallies[address] ??= {});
       finalMarkets.forEach((marketId) => {
-        const tally = scoreMarket(marketId, outcomes.get(marketId) ?? []);
-        if (tally) tallied[marketId] = tally;
+        const marketBets = bets.get(marketId);
+        const tally = scoreMarket(marketId, marketBets?.outcomeIndexes ?? []);
+        if (tally) tallied[marketId] = [...tally, marketBets?.buyCost ?? 0];
       });
       return true;
     },

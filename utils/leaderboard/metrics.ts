@@ -42,11 +42,15 @@ export type MechRequest = {
 /** Market id -> title key */
 export type MarketTitles = Record<string, string>;
 
-/** Market id -> [won bets, counted bets], only for markets with a final answer */
-export type MarketTallies = Record<string, [number, number]>;
+/**
+ * Market id -> [won bets, counted bets, buy cost], only for markets with a final answer. The
+ * buy cost is what the agent paid for its buys on the market, fees included, without sells.
+ */
+export type MarketTallies = Record<string, [number, number, number]>;
 
 export type WindowMetrics = LeaderboardMetrics & {
   settledBets: number;
+  /** ROI denominator: gross buy cost of the markets settled in the window, plus mech fees */
   settledCost: number;
 };
 
@@ -127,8 +131,7 @@ export const computeWindowMetrics = ({
   mechFee: number;
 }): WindowMetrics => {
   let profit = 0;
-  let tradedSettled = 0;
-  let feesSettled = 0;
+  let buyCost = 0;
   let volume = 0;
   let trades = 0;
   let brierSum = 0;
@@ -140,18 +143,27 @@ export const computeWindowMetrics = ({
   days.forEach((day) => {
     if (day.date < windowStart) return;
     profit += day.profit;
-    tradedSettled += day.tradedSettled;
-    feesSettled += day.feesSettled;
     volume += day.traded;
     trades += day.bets;
     brierSum += day.brierSum;
     brierCount += day.brierCount;
+    let dayBuyCost = 0;
+    let isDayBuyCostKnown = day.markets.length > 0;
     new Set(day.markets).forEach((marketId) => {
+      if (lastSettlementDays.get(marketId) !== day.date) return;
       const tally = tallies[marketId];
-      if (!tally || lastSettlementDays.get(marketId) !== day.date) return;
+      if (!tally) {
+        isDayBuyCostKnown = false;
+        return;
+      }
       won += tally[0];
       counted += tally[1];
+      dayBuyCost += tally[2];
     });
+    // Without every market's buy cost, fall back to the day's settled cost: it is net of sell
+    // proceeds, so never more than the gross cost
+    const netSettled = day.tradedSettled + day.feesSettled;
+    buyCost += isDayBuyCostKnown ? dayBuyCost : Math.max(dayBuyCost, netSettled, 0);
   });
 
   let mechRequests = 0;
@@ -161,7 +173,11 @@ export const computeWindowMetrics = ({
   const mechFees = mechRequests * mechFee;
 
   const pnl = profit - mechFees;
-  const settledCost = tradedSettled + feesSettled + mechFees;
+  // The sources' settled cost is net of sell proceeds, so it is tiny or negative for an agent
+  // that sold before settlement, which would blow ROI up. ROI divides by the gross cost of the
+  // buys instead (what the agent put at risk), counted once per market on its last settlement
+  // day, plus mech fees.
+  const settledCost = buyCost + mechFees;
 
   return {
     roi: settledCost > 0 ? pnl / settledCost : 0,

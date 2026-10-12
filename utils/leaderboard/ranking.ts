@@ -10,16 +10,18 @@ export type RankCandidate = {
 
 /**
  * `null` when the agent is ranked in the window, otherwise why not. An agent is ranked with at
- * least `minSettledBets` settled bets in the window and a settled cost above zero, so that its
- * ROI is defined.
+ * least `minSettledBets` settled bets in the window and a settled cost (the ROI denominator)
+ * of at least `minSettledCost`, so that its ROI is meaningful.
  */
 export const getNotRankedReason = (
   candidate: RankCandidate,
-  minSettledBets: number,
+  { minSettledBets, minSettledCost }: { minSettledBets: number; minSettledCost: number },
 ): NotRankedReason | null => {
   if (!candidate.hasSettledActivity) return 'not_ranked_yet';
   const { settledBets, settledCost } = candidate.metrics;
-  if (settledBets < minSettledBets || settledCost <= 0) return 'not_enough_trades_in_window';
+  if (settledBets < minSettledBets || settledCost < minSettledCost) {
+    return 'not_enough_trades_in_window';
+  }
   return null;
 };
 

@@ -697,6 +697,8 @@ export const leaderboardOmenBetsQuery = gql`
       where: { bettor: $bettor, fixedProductMarketMaker_in: $markets }
     ) {
       outcomeIndex
+      amount
+      feeAmount
       fixedProductMarketMaker {
         id
       }
@@ -771,6 +773,7 @@ export const leaderboardPolymarketBetsQuery = gql`
       where: { bettorId_eq: $bettor, questionId_in: $questions }
     ) {
       outcomeIndex
+      amount
       questionId
     }
   }
