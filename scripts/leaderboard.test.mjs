@@ -149,6 +149,15 @@ test('accuracy sums the tallies of markets settled in the window', () => {
   assert.equal(metricsFor([day(TODAY, { markets: ['m9'] })]).accuracy, null);
 });
 
+test('a market settled on two days counts towards accuracy once, on its last day', () => {
+  const days = [
+    day(TODAY - 2 * DAY, { markets: ['m1'] }),
+    day(TODAY - DAY, { markets: ['m1', 'm2'] }),
+  ];
+  const tallies = { m1: [1, 1], m2: [0, 1] };
+  assert.equal(metricsFor(days, { tallies }).accuracy, 0.5);
+});
+
 test('Omen tallies count only finalized, non-arbitrated, valid answers', () => {
   const base = {
     outcomeIndexes: [1, 1, 0],

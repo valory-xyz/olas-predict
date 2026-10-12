@@ -93,6 +93,21 @@ export const attributeMechFees = (
 };
 
 /**
+ * The last day each market settled for the agent. A market can appear on more than one day
+ * (e.g. when its answer changes after a first settlement); its bets are counted once, there.
+ */
+export const getLastSettlementDays = (days: AgentDay[]): Map<string, number> => {
+  const lastDay = new Map<string, number>();
+  days.forEach((day) =>
+    day.markets.forEach((marketId) => {
+      const known = lastDay.get(marketId);
+      if (known === undefined || day.date > known) lastDay.set(marketId, day.date);
+    }),
+  );
+  return lastDay;
+};
+
+/**
  * Metrics for the days from `windowStart` (inclusive) onwards.
  *
  * Mech fees charged to days without daily statistics (mech-only days) count too, so such a
@@ -120,6 +135,7 @@ export const computeWindowMetrics = ({
   let brierCount = 0;
   let won = 0;
   let counted = 0;
+  const lastSettlementDays = getLastSettlementDays(days);
 
   days.forEach((day) => {
     if (day.date < windowStart) return;
@@ -130,9 +146,9 @@ export const computeWindowMetrics = ({
     trades += day.bets;
     brierSum += day.brierSum;
     brierCount += day.brierCount;
-    day.markets.forEach((marketId) => {
+    new Set(day.markets).forEach((marketId) => {
       const tally = tallies[marketId];
-      if (!tally) return;
+      if (!tally || lastSettlementDays.get(marketId) !== day.date) return;
       won += tally[0];
       counted += tally[1];
     });
