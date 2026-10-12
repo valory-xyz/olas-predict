@@ -1,4 +1,4 @@
-import { PushpinFilled, PushpinOutlined } from '@ant-design/icons';
+import { InfoCircleOutlined, PushpinFilled, PushpinOutlined } from '@ant-design/icons';
 import { Button, Flex, Table, Tooltip, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import Link from 'next/link';
@@ -8,7 +8,8 @@ import styled, { keyframes } from 'styled-components';
 
 import { AGENTS, AgentType, NA, POLYGON_SCAN_URL } from 'constants/index';
 import { NOT_RANKED_COPY, RankBy } from 'constants/leaderboard';
-import { COLOR } from 'constants/theme';
+import { MEDIA_QUERY } from 'constants/theme';
+import { useScreen } from 'hooks/useScreen';
 import type { LeaderboardRow } from 'types/leaderboard';
 
 const { Text, Title } = Typography;
@@ -16,28 +17,48 @@ const { Text, Title } = Typography;
 const GOLD = '#ffc53d';
 const POSITIVE = '#3be37f';
 const NEGATIVE = '#ff6b6b';
-const TABLE_SCROLL_WIDTH = 1040;
+/**
+ * Opaque stand-ins for the card's translucent background, behind the cells that stay in place
+ * while the rest scrolls under them (sticky header, pinned rows, fixed columns)
+ */
+const STICKY_BG = '#2b1a4d';
+const PINNED_BG = '#3a2a5c';
+const PINNED_FLASH_BG = '#6a5c86';
+/** Pinned rows stay at the top only up to this many; more lead the list instead */
+const MAX_STICKY_PINNED_ROWS = 5;
 
 const flash = keyframes`
-  from { background: ${COLOR.WHITE_TRANSPARENT_50}; }
-  to { background: ${COLOR.WHITE_TRANSPARENT_10}; }
+  from { background: ${PINNED_FLASH_BG}; }
+  to { background: ${PINNED_BG}; }
 `;
 
 const StyledTable = styled(Table<LeaderboardRow>)`
   .ant-table,
   .ant-table-container,
-  .ant-table-header,
   .ant-table-summary {
     background: transparent;
   }
+  .ant-table-cell {
+    white-space: nowrap;
+  }
   .ant-table-sticky-holder,
-  .ant-table-header {
-    backdrop-filter: blur(10px);
+  .ant-table-header,
+  .ant-table-thead > tr > th {
+    background: ${STICKY_BG};
   }
-  .pinned-row > td {
-    background: ${COLOR.WHITE_TRANSPARENT_10};
+  /* Fixed columns hide what scrolls under them, only once the table is scrolled sideways */
+  .ant-table-tbody > tr > td.ant-table-cell-fix-left {
+    background: transparent;
   }
-  .pinned-row-flash > td {
+  .ant-table-ping-left .ant-table-tbody > tr > td.ant-table-cell-fix-left {
+    background: ${STICKY_BG};
+  }
+  .pinned-row > td,
+  .ant-table-tbody > tr.pinned-row > td.ant-table-cell-fix-left {
+    background: ${PINNED_BG};
+  }
+  .pinned-row-flash > td,
+  .ant-table-tbody > tr.pinned-row-flash > td.ant-table-cell-fix-left {
     animation: ${flash} 2s ease-out;
   }
 `;
@@ -62,12 +83,46 @@ const METRIC_COLUMN_COUNT = 7;
 const RankedHeader = ({ label, isRanked }: { label: string; isRanked: boolean }) =>
   isRanked ? <span style={{ color: GOLD }}>🏆 {label}</span> : <>{label}</>;
 
+const BRIER_HELP =
+  'Average over settled bets of (market price of the chosen outcome when the trade was made − ' +
+  'result)², where the result is 1 for a won bet and 0 for a lost one. It is computed from the ' +
+  'market price at trade time. Lower is better; 0 is perfect.';
+
+const HeaderWithHelp = ({ label, help }: { label: string; help: string }) => (
+  <Tooltip title={help}>
+    <span>
+      {label} <InfoCircleOutlined aria-label={`About ${label}`} />
+    </span>
+  </Tooltip>
+);
+
+const AgentLabel = styled.span`
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+
+  > b {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  ${MEDIA_QUERY.mobile} {
+    gap: 8px;
+  }
+`;
+
+const getDisplayName = (row: LeaderboardRow) =>
+  row.name || `${row.address.slice(0, 6)}…${row.address.slice(-4)}`;
+
 const AgentName = ({ row, agentType }: { row: LeaderboardRow; agentType: AgentType }) => {
+  const name = getDisplayName(row);
   const label = (
-    <Flex gap={12} align="center" component="span">
+    <AgentLabel title={name}>
       <Jazzicon diameter={24} seed={jsNumberForAddress(row.address)} />
-      <b>{row.name || `${row.address.slice(0, 6)}…${row.address.slice(-4)}`}</b>
-    </Flex>
+      <b>{name}</b>
+    </AgentLabel>
   );
   // /agents/[id] resolves Omen agents only, so a Polystrat agent links to its Safe
   return agentType === AGENTS.OMENSTRAT ? (
@@ -98,19 +153,42 @@ const metricCell = (render: (row: LeaderboardRow) => ReactNode, isFirstMetric: b
     row.notRankedReason ? { colSpan: isFirstMetric ? METRIC_COLUMN_COUNT : 0 } : {},
 });
 
-const getColumns = ({ agentType, rankBy, isPinned, onTogglePin }: ColumnOptions) =>
-  [
+/** Column widths, so that all columns fit a 1440px screen and the agent stays in view on mobile */
+const getWidths = (isMobile: boolean) => ({
+  pin: isMobile ? 36 : 44,
+  rank: isMobile ? 40 : 56,
+  agent: isMobile ? 150 : 190,
+  roi: 104,
+  pnl: 112,
+  accuracy: 92,
+  brierScore: 120,
+  avgTradeSize: 128,
+  volume: 120,
+  trades: 76,
+});
+
+const getColumns = ({
+  agentType,
+  rankBy,
+  isPinned,
+  onTogglePin,
+  isMobile,
+}: ColumnOptions & { isMobile: boolean }) => {
+  const widths = getWidths(isMobile);
+  return [
     {
       key: 'pin',
-      width: 56,
+      width: widths.pin,
+      fixed: 'left',
       render: (_: unknown, row: LeaderboardRow) => {
         const pinned = isPinned(row.address);
+        const action = pinned ? 'Unpin' : 'Pin to top';
         return (
-          <Tooltip title={pinned ? 'Unpin' : 'Pin to top'} trigger="hover">
+          <Tooltip title={action} trigger="hover">
             <Button
               type="text"
               size="small"
-              aria-label={pinned ? 'Unpin' : 'Pin to top'}
+              aria-label={`${pinned ? 'Unpin' : 'Pin'} ${getDisplayName(row)}`}
               icon={pinned ? <PushpinFilled /> : <PushpinOutlined />}
               onClick={() => onTogglePin(row.address)}
             />
@@ -121,31 +199,37 @@ const getColumns = ({ agentType, rankBy, isPinned, onTogglePin }: ColumnOptions)
     {
       title: 'Rank',
       key: 'rank',
-      width: 64,
+      width: widths.rank,
+      fixed: 'left',
       className: 'text-end',
       render: (_: unknown, row: LeaderboardRow) => <Text type="secondary">{row.rank ?? '—'}</Text>,
     },
     {
       title: 'Agent',
       key: 'agent',
-      width: 220,
+      width: widths.agent,
+      fixed: 'left',
+      ellipsis: true,
       render: (_: unknown, row: LeaderboardRow) => <AgentName row={row} agentType={agentType} />,
     },
     {
       title: <RankedHeader label="ROI" isRanked={rankBy === 'roi'} />,
       key: 'roi',
+      width: widths.roi,
       className: 'text-end',
       ...metricCell((row) => <Signed value={row.roi!}>{formatPercent(row.roi!)}</Signed>, true),
     },
     {
       title: <RankedHeader label="PnL" isRanked={rankBy === 'pnl'} />,
       key: 'pnl',
+      width: widths.pnl,
       className: 'text-end',
       ...metricCell((row) => <Signed value={row.pnl!}>{formatUsd(row.pnl!)}</Signed>, false),
     },
     {
       title: 'Accuracy',
       key: 'accuracy',
+      width: widths.accuracy,
       className: 'text-end',
       ...metricCell(
         (row) => (row.accuracy === null ? NA : `${Math.round(row.accuracy * 100)}%`),
@@ -153,35 +237,43 @@ const getColumns = ({ agentType, rankBy, isPinned, onTogglePin }: ColumnOptions)
       ),
     },
     {
-      title: 'Brier score',
+      title: <HeaderWithHelp label="Brier score" help={BRIER_HELP} />,
       key: 'brierScore',
+      width: widths.brierScore,
       className: 'text-end',
       ...metricCell((row) => (row.brierScore === null ? NA : row.brierScore.toFixed(2)), false),
     },
     {
       title: 'Avg trade size',
       key: 'avgTradeSize',
+      width: widths.avgTradeSize,
       className: 'text-end',
       ...metricCell((row) => (row.avgTradeSize === null ? NA : formatUsd(row.avgTradeSize)), false),
     },
     {
       title: 'Volume',
       key: 'volume',
+      width: widths.volume,
       className: 'text-end',
       ...metricCell((row) => formatUsd(row.volume ?? 0), false),
     },
     {
       title: 'Trades',
       key: 'trades',
+      width: widths.trades,
       className: 'text-end',
       ...metricCell((row) => (row.trades ?? 0).toLocaleString('en-US'), false),
     },
   ] as ColumnsType<LeaderboardRow>;
+};
+
+const getScrollWidth = (isMobile: boolean) =>
+  Object.values(getWidths(isMobile)).reduce((sum, width) => sum + width, 0);
 
 const NoMatch = ({ search, onClear }: { search: string; onClear: () => void }) => (
   <Flex vertical align="center" gap={8} style={{ padding: '48px 0' }}>
     <Title level={5} className="m-0">
-      No agents match “{search}”
+      No ranked agents match “{search}”
     </Title>
     <Text type="secondary">
       Check the spelling, or clear the search to see the full leaderboard.
@@ -204,6 +296,10 @@ type LeaderboardTableProps = ColumnOptions & {
   onLoadMore: () => void;
 };
 
+type TableRow = LeaderboardRow & { rowKey: string; isPinnedRow?: boolean; flash?: boolean };
+
+const pinnedRowClassName = (row: PinnedRow) => `pinned-row${row.flash ? ' pinned-row-flash' : ''}`;
+
 export const LeaderboardTable = ({
   rows,
   pinnedRows,
@@ -216,33 +312,50 @@ export const LeaderboardTable = ({
   onLoadMore,
   ...columnOptions
 }: LeaderboardTableProps) => {
-  const columns = getColumns(columnOptions);
+  const { isMobile = false } = useScreen();
+  const columns = getColumns({ ...columnOptions, isMobile });
+
+  // A few pins stay at the top while scrolling; a long list of them would cover the
+  // leaderboard, so then they lead the list instead
+  const arePinsSticky = pinnedRows.length <= MAX_STICKY_PINNED_ROWS;
+  const dataSource: TableRow[] = [
+    ...(arePinsSticky
+      ? []
+      : pinnedRows.map((row) => ({ ...row, rowKey: `pinned:${row.address}`, isPinnedRow: true }))),
+    ...rows.map((row) => ({ ...row, rowKey: row.address })),
+  ];
 
   return (
     <Flex vertical gap={24}>
       <StyledTable
-        rowKey="address"
+        rowKey={(row) => (row as TableRow).rowKey}
+        rowClassName={(row) =>
+          (row as TableRow).isPinnedRow ? pinnedRowClassName(row as TableRow) : ''
+        }
         columns={columns}
-        dataSource={rows}
+        dataSource={dataSource}
         loading={isLoading}
         pagination={false}
+        size="middle"
         sticky
-        scroll={{ x: TABLE_SCROLL_WIDTH }}
+        scroll={{ x: getScrollWidth(isMobile) }}
+        tableLayout="fixed"
         locale={{
-          emptyText: search ? (
+          emptyText: isLoading ? (
+            // The spinner says it all; an empty-state message would be wrong while loading
+            <div style={{ height: 120 }} />
+          ) : search ? (
             <NoMatch search={search} onClear={onClearSearch} />
           ) : (
             <Text type="secondary">No ranked agents for this period yet.</Text>
           ),
         }}
         summary={() =>
+          arePinsSticky &&
           pinnedRows.length > 0 && (
             <Table.Summary fixed="top">
               {pinnedRows.map((row) => (
-                <Table.Summary.Row
-                  key={row.address}
-                  className={`pinned-row${row.flash ? ' pinned-row-flash' : ''}`}
-                >
+                <Table.Summary.Row key={row.address} className={pinnedRowClassName(row)}>
                   {columns.map((column, index) => {
                     const cellProps = column.onCell?.(row, index) ?? {};
                     if (cellProps.colSpan === 0) return null;

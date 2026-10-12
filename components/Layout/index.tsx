@@ -5,7 +5,7 @@ import styled from 'styled-components';
 
 import { MENU_MAX_WIDTH } from 'constants/index';
 import { LEADERBOARD_PATH } from 'constants/leaderboard';
-import { COLOR, MEDIA_QUERY } from 'constants/theme';
+import { BREAK_POINT, COLOR, MEDIA_QUERY } from 'constants/theme';
 import { useScreen } from 'hooks/useScreen';
 
 import { Footer } from './Footer';
@@ -13,7 +13,9 @@ import { Menu, MobileMenu } from './Menu';
 
 const { Content, Sider } = AntdLayout;
 
-export const CustomLayout = styled(AntdLayout)`
+export const CustomLayout = styled(AntdLayout).withConfig({
+  shouldForwardProp: (prop) => !['isWide'].includes(prop),
+})<{ isWide?: boolean }>`
   min-height: 100vh;
   padding: 0 24px;
   overflow: auto;
@@ -54,9 +56,25 @@ export const CustomLayout = styled(AntdLayout)`
   ${MEDIA_QUERY.mobile} {
     padding: 0 16px;
   }
+
+  /*
+   * Without the sider the window scrolls, not this element; as a scroll container it would
+   * still be the box sticky elements stick to, so the leaderboard's sticky header and pinned
+   * rows would never stick. Clipping keeps the horizontal clipping without that.
+   */
+  ${({ isWide }) =>
+    isWide &&
+    `
+    @media (max-width: ${parseInt(BREAK_POINT.xl, 10) - 1}px) {
+      overflow: visible;
+      overflow-x: clip;
+    }
+  `}
 `;
 
-const LEADERBOARD_MAX_WIDTH = 1100;
+const LEADERBOARD_MAX_WIDTH = 1200;
+/** Space kept on the left of the leaderboard for the fixed menu, from the content box edge */
+const MENU_CLEARANCE = MENU_MAX_WIDTH + 16;
 
 const ContentInner = styled.div.withConfig({
   shouldForwardProp: (prop) => !['isWide', 'hasSider'].includes(prop),
@@ -65,14 +83,19 @@ const ContentInner = styled.div.withConfig({
   flex-direction: column;
   flex: auto;
   margin: 0 auto;
-  max-width: ${({ isWide, hasSider }) =>
-    // Centered content keeps a menu-width margin on both sides, clear of the fixed menu
-    isWide && hasSider
-      ? `min(${LEADERBOARD_MAX_WIDTH}px, calc(100% - ${2 * MENU_MAX_WIDTH}px))`
-      : isWide
-        ? `${LEADERBOARD_MAX_WIDTH}px`
-        : '720px'};
+  max-width: ${({ isWide }) => (isWide ? `${LEADERBOARD_MAX_WIDTH}px` : '720px')};
   width: 100%;
+
+  /* The wide leaderboard is centred when there is room, otherwise it keeps clear of the menu */
+  ${({ isWide, hasSider }) =>
+    isWide &&
+    hasSider &&
+    `
+    max-width: none;
+    width: min(${LEADERBOARD_MAX_WIDTH}px, calc(100% - ${MENU_CLEARANCE}px));
+    margin-left: max(${MENU_CLEARANCE}px, calc((100% - ${LEADERBOARD_MAX_WIDTH}px) / 2));
+    margin-right: 0;
+  `}
 `;
 
 const BetaBanner = styled.div`
@@ -92,9 +115,10 @@ type LayoutProps = {
 export const Layout = ({ children }: LayoutProps) => {
   const { isDesktop } = useScreen();
   const { pathname } = useRouter();
+  const isWide = pathname === LEADERBOARD_PATH;
 
   return (
-    <CustomLayout>
+    <CustomLayout isWide={isWide}>
       <AntdLayout hasSider={isDesktop}>
         {isDesktop && (
           <Sider width={MENU_MAX_WIDTH}>
@@ -102,7 +126,7 @@ export const Layout = ({ children }: LayoutProps) => {
           </Sider>
         )}
         <Content>
-          <ContentInner isWide={pathname === LEADERBOARD_PATH} hasSider={!!isDesktop}>
+          <ContentInner isWide={isWide} hasSider={!!isDesktop}>
             <BetaBanner>Beta</BetaBanner>
             {!isDesktop && <MobileMenu />}
             {children}
