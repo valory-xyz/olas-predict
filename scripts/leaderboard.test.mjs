@@ -18,7 +18,17 @@ import {
   tallyPolymarketBets,
 } from '../utils/leaderboard/metrics.ts';
 import { getLeaderboardUrl, parseAddress } from '../utils/leaderboard/params.ts';
-import { classifyService, isPearlAgent } from '../utils/leaderboard/pearl.ts';
+import {
+  PEARL_LOOKUP_MAX_FAILURES,
+  PEARL_LOOKUP_RETRY_MS,
+  PEARL_MALFORMED_RECHECK_MS,
+  classifyService,
+  isPearlAgent,
+  isPearlLookupPending,
+  isPearlLookupUnresolved,
+  needsPearlLookup,
+  recordPearlLookup,
+} from '../utils/leaderboard/pearl.ts';
 import { assignRanks, getNotRankedReason, searchByName } from '../utils/leaderboard/ranking.ts';
 import { isCronAuthorized } from '../utils/leaderboard/respond.ts';
 import { getAgentRecords, getLeaderboardPage } from '../utils/leaderboard/views.ts';
@@ -319,6 +329,46 @@ test('the Pearl filter needs the trader package name and the [Pearl service] pre
   assert.equal(classifyService('omenstrat', {}), 'malformed');
   assert.equal(classifyService('omenstrat', null), 'malformed');
   assert.equal(classifyService('omenstrat', { name: 'a', description: 'b' }), 'other');
+});
+
+test('a failed Pearl lookup holds the snapshot back, then gives up and is retried later', () => {
+  const t0 = 1_000_000;
+  assert.equal(needsPearlLookup(undefined, t0), true);
+  assert.equal(isPearlLookupPending(undefined), true);
+
+  let lookup;
+  for (let run = 1; run < PEARL_LOOKUP_MAX_FAILURES; run++) {
+    lookup = recordPearlLookup(lookup, null, t0 + run);
+    assert.equal(isPearlLookupPending(lookup), true, `run ${run}`);
+    assert.equal(needsPearlLookup(lookup, t0 + run), true);
+  }
+  lookup = recordPearlLookup(lookup, null, t0);
+  assert.equal(lookup.failures, PEARL_LOOKUP_MAX_FAILURES);
+  assert.equal(isPearlLookupPending(lookup), false);
+  assert.equal(isPearlLookupUnresolved(lookup), true);
+  assert.equal(needsPearlLookup(lookup, t0 + PEARL_LOOKUP_RETRY_MS - 1), false);
+  assert.equal(needsPearlLookup(lookup, t0 + PEARL_LOOKUP_RETRY_MS), true);
+
+  const resolved = recordPearlLookup(lookup, 'pearl', t0 + PEARL_LOOKUP_RETRY_MS);
+  assert.deepEqual(resolved, {
+    status: 'pearl',
+    checkedAt: t0 + PEARL_LOOKUP_RETRY_MS,
+    failures: 0,
+  });
+  assert.equal(isPearlLookupUnresolved(resolved), false);
+  assert.equal(needsPearlLookup(resolved, Number.MAX_SAFE_INTEGER), false);
+});
+
+test('malformed metadata is not Pearl and is read again after a while', () => {
+  const lookup = recordPearlLookup(undefined, 'malformed', 0);
+  assert.equal(isPearlLookupPending(lookup), false);
+  assert.equal(needsPearlLookup(lookup, PEARL_MALFORMED_RECHECK_MS - 1), false);
+  assert.equal(needsPearlLookup(lookup, PEARL_MALFORMED_RECHECK_MS), true);
+  // A failed re-check keeps the earlier answer and does not hold the snapshot back
+  const failed = recordPearlLookup(lookup, null, PEARL_MALFORMED_RECHECK_MS);
+  assert.equal(failed.status, 'malformed');
+  assert.equal(isPearlLookupPending(failed), false);
+  assert.equal(needsPearlLookup(recordPearlLookup(undefined, 'other', 0), 1e15), false);
 });
 
 test("agent names match Pearl's generateAgentName", () => {

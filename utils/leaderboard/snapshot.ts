@@ -13,6 +13,8 @@ import {
 } from 'constants/leaderboard';
 import type { LeaderboardSnapshot } from 'types/leaderboard';
 
+import type { PearlLookup } from './pearl';
+
 /** How long a warm function trusts its in-memory snapshot before checking Blob again */
 const SNAPSHOT_MEMO_TTL_MS = 60_000;
 /** Shortest edge cache Blob allows, so a rewritten snapshot is visible within a minute */
@@ -20,8 +22,8 @@ const BLOB_CACHE_MAX_AGE_SECONDS = 60;
 
 export type BuilderState = {
   schemaVersion: number;
-  /** Pearl flag per service id, looked up once per service */
-  pearl: Record<string, boolean>;
+  /** Pearl flag lookup per service id */
+  pearl: Record<string, PearlLookup>;
   /** Per agent: mech requests as [title key, timestamp], and the newest timestamp fetched */
   mech: Record<string, { syncedTo: number; requests: [string, number][] }>;
   /** Per agent: [won, counted bets, buy cost in USD] per market with a final answer */

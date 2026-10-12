@@ -2,7 +2,7 @@
  * Server-only fetchers for the leaderboard builder. Each returns plain, normalized data; the
  * builder (`builder.ts`) decides what to fetch and what to keep.
  */
-import { request } from 'graphql-request';
+import { type Variables, request } from 'graphql-request';
 import {
   leaderboardMechRequestsQuery,
   leaderboardOmenBetsQuery,
@@ -42,8 +42,18 @@ const PAGE_SIZE = 1000;
 const IN_FILTER_CHUNK = 500;
 const BRIER_SCALE = 1e18;
 const METADATA_FETCH_TIMEOUT_MS = 10_000;
+/** Services whose metadata is read per batch, between deadline checks */
+const SERVICE_METADATA_BATCH = 25;
+/**
+ * Longest wait for one GraphQL response. Well inside the refresh route's save margin, so a
+ * hung indexer cannot keep the function from saving its working state.
+ */
+const GRAPHQL_TIMEOUT_MS = 30_000;
 /** Days of daily statistics fetched per concurrent Omen page stream */
 const OMEN_DAILY_STATS_DAYS_PER_STREAM = 30;
+
+const gqlRequest = <T>(url: string, document: string, variables: Variables) =>
+  request<T>({ url, document, variables, signal: AbortSignal.timeout(GRAPHQL_TIMEOUT_MS) });
 
 export const chunk = <T>(items: T[], size: number): T[][] => {
   const chunks: T[][] = [];
@@ -111,7 +121,7 @@ export const fetchTraderAgents = async (agentType: AgentType): Promise<AgentPopu
   if (agentType === AGENTS.OMENSTRAT) {
     let idGt = '0x';
     for (;;) {
-      const page = await request<{
+      const page = await gqlRequest<{
         traderAgents: { id: string; serviceId: string }[];
         _meta: { block: { number: number } };
       }>(PREDICT_OMEN_SUBGRAPH_URL, leaderboardOmenTraderAgentsQuery, { idGt });
@@ -127,7 +137,7 @@ export const fetchTraderAgents = async (agentType: AgentType): Promise<AgentPopu
 
   let idGt = '';
   for (;;) {
-    const page = await request<{
+    const page = await gqlRequest<{
       traderAgents: { id: string; serviceId: string }[];
       squidStatus: { height: number };
     }>(POLYMARKET_SQUID_URL, leaderboardPolymarketTraderAgentsQuery, { idGt });
@@ -208,7 +218,7 @@ export const fetchDailyStatistics = async (
       const rows: OmenDailyStatisticRow[] = [];
       let idGt = '';
       for (;;) {
-        const page = await request<{ dailyProfitStatistics: OmenDailyStatisticRow[] }>(
+        const page = await gqlRequest<{ dailyProfitStatistics: OmenDailyStatisticRow[] }>(
           PREDICT_OMEN_SUBGRAPH_URL,
           leaderboardOmenDailyStatisticsQuery,
           { dateGte: String(from), dateLt: String(to), idGt },
@@ -241,7 +251,7 @@ export const fetchDailyStatistics = async (
 
   let idGt = '';
   for (;;) {
-    const page = await request<{ dailyProfitStatistics: PolymarketDailyStatisticRow[] }>(
+    const page = await gqlRequest<{ dailyProfitStatistics: PolymarketDailyStatisticRow[] }>(
       POLYMARKET_SQUID_URL,
       leaderboardPolymarketDailyStatisticsQuery,
       { dateGte: String(dateGte), idGt },
@@ -277,34 +287,32 @@ const publicClients = {
   }),
 } as const;
 
-const fetchJsonWithTimeout = async (url: string): Promise<unknown> => {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), METADATA_FETCH_TIMEOUT_MS);
-  try {
-    const response = await fetch(url, { signal: controller.signal });
-    if (!response.ok) throw new Error(`HTTP ${response.status} for ${url}`);
-    return await response.json();
-  } finally {
-    clearTimeout(timeout);
-  }
+const fetchJsonWithTimeout = async (url: string, timeoutMs: number): Promise<unknown> => {
+  const response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+  if (!response.ok) throw new Error(`HTTP ${response.status} for ${url}`);
+  return response.json();
 };
 
 const toGatewayUrl = (uri: string) =>
   uri.startsWith('ipfs://') ? `https://gateway.autonolas.tech/ipfs/${uri.slice(7)}` : uri;
 
 /**
- * Service metadata (the JSON behind `ServiceRegistry.tokenURI`) by service id. A service whose
- * metadata could not be read is left out, so the caller can retry it on a later run.
+ * Service metadata (the JSON behind `ServiceRegistry.tokenURI`) by service id, and the ids
+ * whose tokenURI or metadata could not be read. Stops at `deadline` (epoch ms): the services
+ * not reached by then are in neither, and each metadata read is cut short at the deadline.
  */
 export const fetchServiceMetadata = async (
   agentType: AgentType,
   serviceIds: string[],
-): Promise<Map<string, unknown>> => {
+  deadline: number,
+): Promise<{ metadata: Map<string, unknown>; failed: string[] }> => {
   const chainId = CHAIN_ID_BY_AGENT_TYPE[agentType] as keyof typeof publicClients;
   const client = publicClients[chainId];
   const metadata = new Map<string, unknown>();
+  const failed: string[] = [];
 
-  for (const ids of chunk(serviceIds, 100)) {
+  for (const ids of chunk(serviceIds, SERVICE_METADATA_BATCH)) {
+    if (Date.now() >= deadline) break;
     const uris = await client.multicall({
       contracts: ids.map((id) => ({
         address: SERVICE_REGISTRY_ADDRESSES[chainId],
@@ -318,16 +326,23 @@ export const fetchServiceMetadata = async (
       const uri = uris[ids.indexOf(id)];
       if (uri.status !== 'success') {
         console.error(`Leaderboard: tokenURI of service ${id} unavailable`, uri.error);
+        failed.push(id);
         return;
       }
+      const timeoutMs = Math.min(METADATA_FETCH_TIMEOUT_MS, deadline - Date.now());
+      // Out of time: not attempted, so not a failure
+      if (timeoutMs <= 0) return;
       try {
-        metadata.set(id, await fetchJsonWithTimeout(toGatewayUrl(uri.result)));
+        metadata.set(id, await fetchJsonWithTimeout(toGatewayUrl(uri.result), timeoutMs));
       } catch (error) {
+        // Cut short by the deadline rather than the full timeout: not a failure either
+        if (timeoutMs < METADATA_FETCH_TIMEOUT_MS && Date.now() >= deadline) return;
         console.error(`Leaderboard: metadata of service ${id} unavailable`, error);
+        failed.push(id);
       }
     });
   }
-  return metadata;
+  return { metadata, failed };
 };
 
 /** `title` is `null` for a request whose question title could not be parsed */
@@ -343,7 +358,7 @@ export const fetchMechRequests = async (
     agentType === AGENTS.OMENSTRAT ? OLAS_MECH_SUBGRAPH_URL : OLAS_MECH_POLYGON_SUBGRAPH_URL;
   const requests: MechRequestRecord[] = [];
   for (let skip = 0; ; skip += PAGE_SIZE) {
-    const page = await request<{
+    const page = await gqlRequest<{
       requests: {
         blockTimestamp: string;
         parsedRequest: { questionTitle: string | null } | null;
@@ -377,7 +392,7 @@ export const fetchOmenMarketAnswers = async (
 ): Promise<Map<string, OmenMarketAnswer>> => {
   const answers = new Map<string, OmenMarketAnswer>();
   const pages = await mapWithConcurrency(chunk(marketIds, IN_FILTER_CHUNK), 4, (ids) =>
-    request<{
+    gqlRequest<{
       fixedProductMarketMakers: {
         id: string;
         currentAnswer: string | null;
@@ -408,7 +423,7 @@ export const fetchPolymarketQuestions = async (
 ): Promise<Map<string, PolymarketQuestion>> => {
   const questions = new Map<string, PolymarketQuestion>();
   const pages = await mapWithConcurrency(chunk(questionIds, IN_FILTER_CHUNK), 4, (ids) =>
-    request<{
+    gqlRequest<{
       questions: {
         id: string;
         metadata: { title: string | null } | null;
@@ -461,7 +476,7 @@ export const fetchMarketBets = async (
   for (const markets of chunk(marketIds, IN_FILTER_CHUNK)) {
     for (let skip = 0; ; skip += PAGE_SIZE) {
       if (agentType === AGENTS.OMENSTRAT) {
-        const page = await request<{
+        const page = await gqlRequest<{
           bets: {
             outcomeIndex: string;
             amount: string;
@@ -474,7 +489,7 @@ export const fetchMarketBets = async (
         );
         if (page.bets.length < PAGE_SIZE) break;
       } else {
-        const page = await request<{
+        const page = await gqlRequest<{
           bets: { outcomeIndex: string; amount: string; questionId: string }[];
         }>(POLYMARKET_SQUID_URL, leaderboardPolymarketBetsQuery, {
           bettor,

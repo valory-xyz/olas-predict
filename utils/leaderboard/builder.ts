@@ -14,7 +14,13 @@ import {
   tallyOmenBets,
   tallyPolymarketBets,
 } from './metrics';
-import { isPearlAgent } from './pearl';
+import {
+  classifyService,
+  isPearlLookupPending,
+  isPearlLookupUnresolved,
+  needsPearlLookup,
+  recordPearlLookup,
+} from './pearl';
 import type { BuilderState } from './snapshot';
 import {
   fetchDailyStatistics,
@@ -30,21 +36,23 @@ import {
 
 /** Mech requests are kept from this long before the longest window, for markets open then */
 const MECH_LOOKBACK_SECONDS = 30 * SECONDS_PER_DAY;
-const SERVICE_METADATA_BATCH = 100;
 const AGENT_CONCURRENCY = 8;
 
 export type BuildResult = {
   state: BuilderState;
   /** `null` while the backfill is incomplete; the previous snapshot stays in place */
   snapshot: LeaderboardSnapshot | null;
+  /** Active services whose Pearl flag could not be read, left out of the snapshot */
+  unresolvedServices: string[];
 };
 
 const isPastDeadline = (deadline: number) => Date.now() >= deadline;
 
 /**
- * Looks up the Pearl flag of services not seen before; `false` when time ran out. A service
- * whose metadata cannot be read is left without a flag, so it is treated as not Pearl in this
- * snapshot and looked up again on the next run.
+ * Looks up the Pearl flag of the services that need it (see `needsPearlLookup`); `false`
+ * while a service's flag is still pending, i.e. a lookup failed fewer than
+ * `PEARL_LOOKUP_MAX_FAILURES` runs in a row or time ran out, so the snapshot waits rather
+ * than leave a Pearl agent out.
  */
 const updatePearlFlags = async (
   agentType: AgentType,
@@ -52,16 +60,16 @@ const updatePearlFlags = async (
   serviceIds: string[],
   deadline: number,
 ) => {
-  const unknown = serviceIds.filter((id) => state.pearl[id] === undefined);
-  for (let i = 0; i < unknown.length; i += SERVICE_METADATA_BATCH) {
-    if (isPastDeadline(deadline)) return false;
-    const batch = unknown.slice(i, i + SERVICE_METADATA_BATCH);
-    const metadata = await fetchServiceMetadata(agentType, batch);
-    metadata.forEach((value, id) => {
-      state.pearl[id] = isPearlAgent(agentType, value);
-    });
-  }
-  return true;
+  const now = Date.now();
+  const toLookUp = serviceIds.filter((id) => needsPearlLookup(state.pearl[id], now));
+  const { metadata, failed } = await fetchServiceMetadata(agentType, toLookUp, deadline);
+  metadata.forEach((value, id) => {
+    state.pearl[id] = recordPearlLookup(state.pearl[id], classifyService(agentType, value), now);
+  });
+  failed.forEach((id) => {
+    state.pearl[id] = recordPearlLookup(state.pearl[id], null, now);
+  });
+  return serviceIds.every((id) => !isPearlLookupPending(state.pearl[id]));
 };
 
 /** Fetches each agent's new mech requests; `false` when time ran out */
@@ -218,13 +226,14 @@ export const buildLeaderboard = async (
   const activeAgents = population.agents.filter(({ address }) =>
     statistics.daysByAgent.has(address),
   );
-  const pearlFlagsComplete = await updatePearlFlags(
-    agentType,
-    state,
-    [...new Set(activeAgents.map(({ serviceId }) => serviceId))],
-    deadline,
+  const activeServices = [...new Set(activeAgents.map(({ serviceId }) => serviceId))];
+  const pearlFlagsComplete = await updatePearlFlags(agentType, state, activeServices, deadline);
+  const unresolvedServices = activeServices.filter((id) =>
+    isPearlLookupUnresolved(state.pearl[id]),
   );
-  const pearlAgents = activeAgents.filter(({ serviceId }) => state.pearl[serviceId]);
+  const pearlAgents = activeAgents.filter(
+    ({ serviceId }) => state.pearl[serviceId]?.status === 'pearl',
+  );
   const pearlAddresses = pearlAgents.map(({ address }) => address);
 
   const marketsByAgent = new Map(
@@ -260,7 +269,7 @@ export const buildLeaderboard = async (
   pruneState(state, marketsByAgent, pearlAddresses);
 
   if (!pearlFlagsComplete || !titlesComplete || !talliesComplete || !mechComplete) {
-    return { state, snapshot: null };
+    return { state, snapshot: null, unresolvedServices };
   }
 
   const marketTitles: MarketTitles =
@@ -285,5 +294,5 @@ export const buildLeaderboard = async (
       tallies: state.tallies[address] ?? {},
     })),
   });
-  return { state, snapshot };
+  return { state, snapshot, unresolvedServices };
 };

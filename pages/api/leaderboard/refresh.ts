@@ -17,6 +17,11 @@ type RefreshResponse = {
   /** Still backfilling: progress was saved, the previous snapshot (if any) stays in place */
   pending: AgentType[];
   failed: AgentType[];
+  /**
+   * Per agent type, active services whose Pearl flag could not be read after repeated tries;
+   * they are left out of the snapshot until a later lookup succeeds
+   */
+  unresolvedServices: Partial<Record<AgentType, string[]>>;
   updatedAt: string;
 };
 
@@ -36,14 +41,15 @@ const handler = async (
     LEADERBOARD_AGENT_TYPES.map(async (agentType) => {
       const state = await readBuilderState(agentType);
       let snapshot;
+      let unresolvedServices: string[] = [];
       try {
-        ({ snapshot } = await buildLeaderboard(agentType, state, deadline));
+        ({ snapshot, unresolvedServices } = await buildLeaderboard(agentType, state, deadline));
       } finally {
         // The builder updates `state` as it goes, so keep what this run fetched even if it failed
         await writeBuilderState(agentType, state);
       }
       if (snapshot) await writeSnapshot(snapshot);
-      return snapshot ? 'updated' : 'pending';
+      return { status: snapshot ? ('updated' as const) : ('pending' as const), unresolvedServices };
     }),
   );
 
@@ -51,12 +57,16 @@ const handler = async (
     updated: [],
     pending: [],
     failed: [],
+    unresolvedServices: {},
     updatedAt: new Date().toISOString(),
   };
   results.forEach((result, index) => {
     const agentType = LEADERBOARD_AGENT_TYPES[index];
     if (result.status === 'fulfilled') {
-      response[result.value].push(agentType);
+      response[result.value.status].push(agentType);
+      if (result.value.unresolvedServices.length) {
+        response.unresolvedServices[agentType] = result.value.unresolvedServices;
+      }
     } else {
       console.error(`Leaderboard: ${agentType} refresh failed`, result.reason);
       response.failed.push(agentType);

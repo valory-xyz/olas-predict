@@ -33,3 +33,53 @@ export const classifyService = (agentType: AgentType, metadata: unknown): PearlC
 
 export const isPearlAgent = (agentType: AgentType, metadata: unknown): boolean =>
   classifyService(agentType, metadata) === 'pearl';
+
+/** What the builder knows about one service's Pearl flag */
+export type PearlLookup = {
+  /** `null` until a lookup succeeds */
+  status: PearlClassification | null;
+  /** When the service was last looked up (epoch ms), whatever the outcome */
+  checkedAt: number;
+  /** Lookups failed in a row (tokenURI or metadata unreadable) */
+  failures: number;
+};
+
+/**
+ * A snapshot waits for a service whose lookup failed, so a Pearl agent is not silently left
+ * out, but only this many runs in a row: after that the service is reported as unresolved and
+ * left out, so one dead metadata link cannot stall the leaderboard.
+ */
+export const PEARL_LOOKUP_MAX_FAILURES = 3;
+/** How long an unresolved service waits before it is looked up again */
+export const PEARL_LOOKUP_RETRY_MS = 6 * 60 * 60 * 1000;
+/** How long malformed metadata is trusted before it is read again */
+export const PEARL_MALFORMED_RECHECK_MS = 24 * 60 * 60 * 1000;
+
+/** Whether a service still needs a (first, repeated or periodic) lookup */
+export const needsPearlLookup = (lookup: PearlLookup | undefined, now: number): boolean => {
+  if (!lookup) return true;
+  if (lookup.status === 'pearl' || lookup.status === 'other') return false;
+  if (lookup.status === 'malformed') return now - lookup.checkedAt >= PEARL_MALFORMED_RECHECK_MS;
+  return (
+    lookup.failures < PEARL_LOOKUP_MAX_FAILURES || now - lookup.checkedAt >= PEARL_LOOKUP_RETRY_MS
+  );
+};
+
+/** Whether a snapshot must wait for this service's lookup */
+export const isPearlLookupPending = (lookup: PearlLookup | undefined): boolean =>
+  !lookup || (lookup.status === null && lookup.failures < PEARL_LOOKUP_MAX_FAILURES);
+
+/** Whether the service gave up on lookups: left out of the snapshot, and reported */
+export const isPearlLookupUnresolved = (lookup: PearlLookup | undefined): boolean =>
+  !!lookup && lookup.status === null && lookup.failures >= PEARL_LOOKUP_MAX_FAILURES;
+
+/** The lookup after one attempt: `classification` on success, `null` when it failed */
+export const recordPearlLookup = (
+  previous: PearlLookup | undefined,
+  classification: PearlClassification | null,
+  now: number,
+): PearlLookup =>
+  classification
+    ? { status: classification, checkedAt: now, failures: 0 }
+    : // A failed re-check of malformed metadata keeps the previous answer
+      { status: previous?.status ?? null, checkedAt: now, failures: (previous?.failures ?? 0) + 1 };
