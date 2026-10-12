@@ -71,6 +71,15 @@ test('an unplaced mech request lands on its own day and makes that day negative'
   assert.equal(mechOnly.pnl, -MECH_FEE_USD);
 });
 
+test('a request without a question title is charged on its own day', () => {
+  const fees = attributeMechFees(
+    [day(TODAY - DAY, { markets: ['m1'] })],
+    [{ titleKey: '', timestamp: TODAY - 3 * DAY + 5 }],
+    { m1: 't1', m2: '' },
+  );
+  assert.deepEqual([...fees], [[TODAY - 3 * DAY, 1]]);
+});
+
 test('a request made after the settlement day stays on its own day', () => {
   const fees = attributeMechFees(
     [day(TODAY - 3 * DAY, { markets: ['m1'] })],

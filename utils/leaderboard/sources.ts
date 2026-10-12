@@ -330,7 +330,8 @@ export const fetchServiceMetadata = async (
   return metadata;
 };
 
-export type MechRequestRecord = { title: string; timestamp: number };
+/** `title` is `null` for a request whose question title could not be parsed */
+export type MechRequestRecord = { title: string | null; timestamp: number };
 
 /** The agent's mech requests after `timestampGt`, oldest first */
 export const fetchMechRequests = async (
@@ -353,8 +354,11 @@ export const fetchMechRequests = async (
       skip,
     });
     page.requests.forEach(({ blockTimestamp, parsedRequest }) => {
-      const title = parsedRequest?.questionTitle;
-      if (title) requests.push({ title, timestamp: Number(blockTimestamp) });
+      // Every request is paid for, even one whose question could not be parsed
+      requests.push({
+        title: parsedRequest?.questionTitle || null,
+        timestamp: Number(blockTimestamp),
+      });
     });
     if (page.requests.length < PAGE_SIZE) break;
   }

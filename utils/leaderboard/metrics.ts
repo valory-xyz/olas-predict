@@ -69,7 +69,8 @@ export const getWindowStart = (nowSeconds: number, days: number) =>
  *
  * A request whose question title belongs to a market settled for this agent lands on that
  * market's settlement day, if it was made before the end of that day. Every other request
- * lands on its own day, like the agent's unplaced requests.
+ * lands on its own day, like the agent's unplaced requests, including one without a title
+ * (an empty `titleKey`).
  */
 export const attributeMechFees = (
   days: AgentDay[],

@@ -77,7 +77,11 @@ const updateMechRequests = async (
     const entry = state.mech[address] ?? { syncedTo: keepFrom, requests: [] };
     const fetched = await fetchMechRequests(agentType, address, entry.syncedTo);
     const requests = entry.requests.filter(([, timestamp]) => timestamp >= keepFrom);
-    fetched.forEach(({ title, timestamp }) => requests.push([toTitleKey(title), timestamp]));
+    // A request without a question title cannot be matched to a market; an empty key charges
+    // it to its own day
+    fetched.forEach(({ title, timestamp }) =>
+      requests.push([title ? toTitleKey(title) : '', timestamp]),
+    );
     const syncedTo = fetched.reduce(
       (max, { timestamp }) => Math.max(max, timestamp),
       entry.syncedTo,
@@ -262,7 +266,9 @@ export const buildLeaderboard = async (
   const marketTitles: MarketTitles =
     agentType === AGENTS.OMENSTRAT
       ? Object.fromEntries(
-          Object.entries(statistics.omenTitles).map(([id, title]) => [id, toTitleKey(title)]),
+          Object.entries(statistics.omenTitles)
+            .filter(([, title]) => title)
+            .map(([id, title]) => [id, toTitleKey(title)]),
         )
       : state.titles;
 
