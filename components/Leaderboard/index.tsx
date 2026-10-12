@@ -70,7 +70,17 @@ export const Leaderboard = ({
   const [searchInput, setSearchInput] = useState('');
   const search = useDebouncedValue(searchInput.trim(), SEARCH_DEBOUNCE_MS);
 
-  const { pins, isLoaded: arePinsLoaded, isPinned, addPin, removePin } = usePinnedAgents();
+  // Messages from the hook render inside the theme, so they match the dark page
+  const [messageApi, messageHolder] = message.useMessage();
+  const {
+    pins,
+    isLoaded: arePinsLoaded,
+    isPinned,
+    addPin,
+    removePin,
+  } = usePinnedAgents({
+    onSaveFailed: () => messageApi.warning('Pins cannot be saved in this browser.'),
+  });
   const pinnedAddresses = useMemo(
     () => pins.filter((pin) => pin.agentType === agentType).map((pin) => pin.address),
     [pins, agentType],
@@ -92,7 +102,7 @@ export const Leaderboard = ({
   const arrivalRecord = pinned.data?.find((record) => record.address === flashAddress);
   useEffect(() => {
     if (!flashAddress || !arrivalRecord) return;
-    message.success(
+    messageApi.success(
       arrivalRecord.name
         ? `Your agent ${arrivalRecord.name} is pinned to the top`
         : 'Your agent is pinned to the top',
@@ -117,7 +127,7 @@ export const Leaderboard = ({
   }, [pinned.data, rankBy, flashAddress]);
 
   const rows = useMemo(() => list.data?.pages.flatMap((page) => page.agents) ?? [], [list.data]);
-  const totalRanked = list.data?.pages[0]?.totalRanked;
+  const firstPage = list.data?.pages[0];
 
   const onTogglePin = useCallback(
     (address: string) =>
@@ -126,11 +136,16 @@ export const Leaderboard = ({
   );
 
   const isUnavailable = list.error instanceof LeaderboardRequestError && list.error.status === 503;
+  // The snapshot changed under "Load more": the list is starting over from the first page
+  const isRestarting = list.error instanceof LeaderboardRequestError && list.error.status === 409;
   // A failed "Load more" keeps the rows already loaded
-  const hasListFailed = list.isError && !list.data;
+  const hasListFailed = list.isError && !list.data && !isRestarting;
+  // Covers retries too: until a page arrives the table shows a spinner, not an empty state
+  const isListLoading = !list.data && (list.isPending || list.isFetching || isRestarting);
 
   return (
     <Flex vertical gap={24} className="flex-auto">
+      {messageHolder}
       <Title level={2} className="m-0 text-center">
         Leaderboard
       </Title>
@@ -153,8 +168,12 @@ export const Leaderboard = ({
           </Text>
         ) : (
           <>
-            {totalRanked !== undefined && (
-              <Text type="secondary">{`${totalRanked.toLocaleString('en-US')} ranked agents`}</Text>
+            {firstPage && (
+              <Text type="secondary">
+                {search
+                  ? `${firstPage.totalResults.toLocaleString('en-US')} of ${firstPage.totalRanked.toLocaleString('en-US')} ranked agents match`
+                  : `${firstPage.totalRanked.toLocaleString('en-US')} ranked agents`}
+              </Text>
             )}
             {pinned.isError && (
               <Text type="danger">Pinned agents could not be loaded. Please try again later.</Text>
@@ -162,7 +181,7 @@ export const Leaderboard = ({
             <LeaderboardTable
               rows={rows}
               pinnedRows={pinnedRows}
-              isLoading={list.isLoading}
+              isLoading={isListLoading}
               search={search}
               onClearSearch={() => setSearchInput('')}
               hasMore={!!list.hasNextPage}

@@ -37,6 +37,7 @@ import {
   needsPearlLookup,
   recordPearlLookup,
 } from '../utils/leaderboard/pearl.ts';
+import { parseStoredPins } from '../utils/leaderboard/pins.ts';
 import { assignRanks, getNotRankedReason, searchByName } from '../utils/leaderboard/ranking.ts';
 import { isCronAuthorized } from '../utils/leaderboard/respond.ts';
 import { isValidSnapshot } from '../utils/leaderboard/validate.ts';
@@ -378,6 +379,29 @@ test('malformed metadata is not Pearl and is read again after a while', () => {
   assert.equal(failed.status, 'malformed');
   assert.equal(isPearlLookupPending(failed), false);
   assert.equal(needsPearlLookup(recordPearlLookup(undefined, 'other', 0), 1e15), false);
+});
+
+test('stored pins: invalid entries dropped one by one, addresses lower-cased, no duplicates', () => {
+  const upper = '0xFE94203ab2c1c22fe8585cbebf865f7b69eb7027';
+  const lower = upper.toLowerCase();
+  const pins = parseStoredPins(
+    JSON.stringify([
+      { address: upper, agentType: 'omenstrat', pinnedAt: 1 },
+      { address: lower, agentType: 'omenstrat', pinnedAt: 2 },
+      { address: lower, agentType: 'polystrat' },
+      { address: '0xnope', agentType: 'omenstrat', pinnedAt: 3 },
+      { address: lower, agentType: 'other', pinnedAt: 4 },
+      null,
+      'x',
+    ]),
+  );
+  assert.deepEqual(pins, [
+    { address: lower, agentType: 'omenstrat', pinnedAt: 1 },
+    { address: lower, agentType: 'polystrat', pinnedAt: 0 },
+  ]);
+  assert.deepEqual(parseStoredPins('{not json'), []);
+  assert.deepEqual(parseStoredPins('{"a":1}'), []);
+  assert.deepEqual(parseStoredPins(null), []);
 });
 
 test("agent names match Pearl's generateAgentName", () => {

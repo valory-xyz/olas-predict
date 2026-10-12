@@ -15,15 +15,19 @@ import {
 import { SEO_CONFIG } from 'constants/seo';
 import { parseAddress, parseAgentType, parseRankBy, parseWindow } from 'utils/leaderboard/params';
 
+const { AGENT_TYPE, RANK_BY, WINDOW, PIN } = LEADERBOARD_QUERY_PARAMS;
+
 const LeaderboardPage = () => {
   const router = useRouter();
   const { query, isReady } = router;
 
-  // Invalid or missing values fall back to the defaults
-  const agentType =
-    parseAgentType(query[LEADERBOARD_QUERY_PARAMS.AGENT_TYPE]) ?? DEFAULT_AGENT_TYPE;
-  const rankBy = parseRankBy(query[LEADERBOARD_QUERY_PARAMS.RANK_BY]) ?? DEFAULT_RANK_BY;
-  const window = parseWindow(query[LEADERBOARD_QUERY_PARAMS.WINDOW]) ?? DEFAULT_WINDOW;
+  // Values match case-insensitively; invalid or missing ones fall back to the defaults
+  const agentTypeParam = parseAgentType(query[AGENT_TYPE]);
+  const rankByParam = parseRankBy(query[RANK_BY]);
+  const windowParam = parseWindow(query[WINDOW]);
+  const agentType = agentTypeParam ?? DEFAULT_AGENT_TYPE;
+  const rankBy = rankByParam ?? DEFAULT_RANK_BY;
+  const window = windowParam ?? DEFAULT_WINDOW;
 
   const setQuery = useCallback(
     (changes: Record<string, string | undefined>) => {
@@ -34,15 +38,31 @@ const LeaderboardPage = () => {
     [router],
   );
 
-  // Deep link from Pearl: take the pin once, then drop it from the URL so a reload does not
-  // repeat the arrival. An invalid pin is ignored.
+  // Deep link from Pearl: take the pin once (lower-cased), then drop it from the URL so a
+  // reload does not repeat the arrival. An invalid pin is ignored. The same pass writes the
+  // other parameters back in their canonical form (e.g. `rankBy=ROI` becomes `rankBy=roi`) and
+  // drops invalid ones.
   const [arrivalAddress, setArrivalAddress] = useState<string | null>(null);
-  const pinParam = query[LEADERBOARD_QUERY_PARAMS.PIN];
+  const pinParam = query[PIN];
   useEffect(() => {
-    if (!isReady || pinParam === undefined) return;
-    setArrivalAddress(parseAddress(pinParam));
-    setQuery({ [LEADERBOARD_QUERY_PARAMS.PIN]: undefined });
-  }, [isReady, pinParam, setQuery]);
+    if (!isReady) return;
+    const changes: Record<string, string | undefined> = {};
+    if (pinParam !== undefined) {
+      setArrivalAddress(parseAddress(pinParam));
+      changes[PIN] = undefined;
+    }
+    (
+      [
+        [AGENT_TYPE, agentTypeParam],
+        [RANK_BY, rankByParam],
+        [WINDOW, windowParam],
+      ] as const
+    ).forEach(([name, parsed]) => {
+      const raw = query[name];
+      if (raw !== undefined && raw !== parsed) changes[name] = parsed ?? undefined;
+    });
+    if (Object.keys(changes).length) setQuery(changes);
+  }, [isReady, pinParam, query, agentTypeParam, rankByParam, windowParam, setQuery]);
 
   return (
     <>
@@ -56,15 +76,9 @@ const LeaderboardPage = () => {
           rankBy={rankBy}
           window={window}
           arrivalAddress={arrivalAddress}
-          onAgentTypeChange={(value: AgentType) =>
-            setQuery({ [LEADERBOARD_QUERY_PARAMS.AGENT_TYPE]: value })
-          }
-          onRankByChange={(value: RankBy) =>
-            setQuery({ [LEADERBOARD_QUERY_PARAMS.RANK_BY]: value })
-          }
-          onWindowChange={(value: LeaderboardWindow) =>
-            setQuery({ [LEADERBOARD_QUERY_PARAMS.WINDOW]: value })
-          }
+          onAgentTypeChange={(value: AgentType) => setQuery({ [AGENT_TYPE]: value })}
+          onRankByChange={(value: RankBy) => setQuery({ [RANK_BY]: value })}
+          onWindowChange={(value: LeaderboardWindow) => setQuery({ [WINDOW]: value })}
         />
       )}
     </>
