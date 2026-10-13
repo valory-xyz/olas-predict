@@ -23,6 +23,7 @@ import {
   parseRankBy,
   parseSnapshotParam,
   parseWindow,
+  shouldRestartFromSnapshot,
 } from '../utils/leaderboard/params.ts';
 import {
   PEARL_LOOKUP_MAX_FAILURES,
@@ -810,4 +811,13 @@ test('the snapshot parameter must be a past canonical ISO timestamp', () => {
   ]) {
     assert.equal(parseSnapshotParam(bad, now), null, String(bad));
   }
+});
+
+test('a 409 restarts the list only from a newer snapshot than the one shown', () => {
+  const shown = '2026-10-13T11:00:00.000Z';
+  assert.equal(shouldRestartFromSnapshot('2026-10-13T12:00:00.000Z', shown), true);
+  assert.equal(shouldRestartFromSnapshot('2026-10-13T10:00:00.000Z', shown), false);
+  assert.equal(shouldRestartFromSnapshot(shown, shown), false);
+  assert.equal(shouldRestartFromSnapshot(undefined, shown), false);
+  assert.equal(shouldRestartFromSnapshot(shown, undefined), true);
 });

@@ -59,6 +59,17 @@ export const parseSnapshotParam = (value: QueryValue, now: number): string | nul
   return new Date(time).toISOString() === value ? value : null;
 };
 
+/**
+ * Whether a `409`'s snapshot should restart the list: only when it is newer than the one the
+ * list already shows (or there is none), so an instance still serving an older snapshot cannot
+ * flip the list back and forth.
+ */
+export const shouldRestartFromSnapshot = (
+  conflictUpdatedAt: string | undefined,
+  currentUpdatedAt: string | undefined,
+): conflictUpdatedAt is string =>
+  !!conflictUpdatedAt && (!currentUpdatedAt || conflictUpdatedAt > currentUpdatedAt);
+
 /** The first of `names` given more than once in the query, if any */
 export const findRepeatedParam = (
   query: Partial<Record<string, QueryValue>>,

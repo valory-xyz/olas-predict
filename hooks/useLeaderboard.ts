@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { AgentType } from 'constants/index';
 import { LEADERBOARD_PAGE_SIZE, LeaderboardWindow, RankBy } from 'constants/leaderboard';
 import type { LeaderboardErrorResponse, LeaderboardListResponse } from 'types/leaderboard';
+import { shouldRestartFromSnapshot } from 'utils/leaderboard/params';
 
 export class LeaderboardRequestError extends Error {
   constructor(
@@ -99,16 +100,16 @@ export const useLeaderboard = ({
   });
 
   const { error } = query;
+  const shownSnapshot = snapshot ?? query.data?.pages[0]?.updatedAt;
   useEffect(() => {
     if (
       error instanceof LeaderboardRequestError &&
       error.status === 409 &&
-      error.updatedAt &&
-      error.updatedAt !== snapshot
+      shouldRestartFromSnapshot(error.updatedAt, shownSnapshot)
     ) {
       setRestart({ filtersKey, snapshot: error.updatedAt });
     }
-  }, [error, filtersKey, snapshot]);
+  }, [error, filtersKey, shownSnapshot]);
 
   return query;
 };
