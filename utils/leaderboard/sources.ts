@@ -38,6 +38,7 @@ import {
   leaderboardPolymarketQuestionsQuery,
   leaderboardPolymarketTraderAgentsQuery,
 } from './queries';
+import { withRetry } from './retry';
 
 const PAGE_SIZE = 1000;
 /** `id_in` / `_in` filters are chunked to stay well inside the indexers' limits */
@@ -54,8 +55,16 @@ const GRAPHQL_TIMEOUT_MS = 30_000;
 /** Days of daily statistics fetched per concurrent Omen page stream */
 const OMEN_DAILY_STATS_DAYS_PER_STREAM = 30;
 
-const gqlRequest = <T>(url: string, document: string, variables: Variables) =>
-  request<T>({ url, document, variables, signal: AbortSignal.timeout(GRAPHQL_TIMEOUT_MS) });
+/**
+ * One GraphQL request, retried on a `5xx`, timeout or network error while the retry still
+ * starts before `deadline` (epoch ms): one flaky answer among a run's hundreds of calls should
+ * not fail the whole agent type for the hour.
+ */
+const gqlRequest = <T>(url: string, document: string, variables: Variables, deadline: number) =>
+  withRetry(
+    () => request<T>({ url, document, variables, signal: AbortSignal.timeout(GRAPHQL_TIMEOUT_MS) }),
+    { deadline },
+  );
 
 /** Thrown by a fetcher whose result is needed whole when `deadline` passes before it is done */
 export class DeadlineError extends Error {
@@ -136,7 +145,7 @@ export const fetchTraderAgents = async (
       const page = await gqlRequest<{
         traderAgents: { id: string; serviceId: string }[];
         _meta: { block: { number: number } };
-      }>(PREDICT_OMEN_SUBGRAPH_URL, leaderboardOmenTraderAgentsQuery, { idGt });
+      }>(PREDICT_OMEN_SUBGRAPH_URL, leaderboardOmenTraderAgentsQuery, { idGt }, deadline);
       sourceHeight ??= page._meta.block.number;
       page.traderAgents.forEach(({ id, serviceId }) =>
         agents.push({ address: id.toLowerCase(), serviceId }),
@@ -153,7 +162,7 @@ export const fetchTraderAgents = async (
     const page = await gqlRequest<{
       traderAgents: { id: string; serviceId: string }[];
       squidStatus: { height: number };
-    }>(POLYMARKET_SQUID_URL, leaderboardPolymarketTraderAgentsQuery, { idGt });
+    }>(POLYMARKET_SQUID_URL, leaderboardPolymarketTraderAgentsQuery, { idGt }, deadline);
     sourceHeight ??= page.squidStatus.height;
     page.traderAgents.forEach(({ id, serviceId }) =>
       agents.push({ address: id.toLowerCase(), serviceId }),
@@ -235,6 +244,7 @@ export const fetchDailyStatistics = async (
           PREDICT_OMEN_SUBGRAPH_URL,
           leaderboardOmenDailyStatisticsQuery,
           { dateGte: String(from), dateLt: String(to), idGt },
+          deadline,
         );
         rows.push(...page.dailyProfitStatistics);
         if (page.dailyProfitStatistics.length < PAGE_SIZE) break;
@@ -266,6 +276,7 @@ export const fetchDailyStatistics = async (
       POLYMARKET_SQUID_URL,
       leaderboardPolymarketDailyStatisticsQuery,
       { dateGte: String(dateGte), idGt },
+      deadline,
     );
     page.dailyProfitStatistics.forEach((row) => {
       pushDay(daysByAgent, row.traderAgentId.toLowerCase(), {
@@ -382,18 +393,28 @@ export const fetchMechRequests = async (
     isPastDeadline: () => Date.now() >= deadline,
     fetchAfter: async (after) =>
       toRows(
-        await gqlRequest<{ requests: MechRequestRow[] }>(url, leaderboardMechRequestsQuery, {
-          sender,
-          timestampGt: String(after),
-        }),
+        await gqlRequest<{ requests: MechRequestRow[] }>(
+          url,
+          leaderboardMechRequestsQuery,
+          {
+            sender,
+            timestampGt: String(after),
+          },
+          deadline,
+        ),
       ),
     fetchAt: async (timestamp, idGt) =>
       toRows(
-        await gqlRequest<{ requests: MechRequestRow[] }>(url, leaderboardMechRequestsAtQuery, {
-          sender,
-          timestamp: String(timestamp),
-          idGt,
-        }),
+        await gqlRequest<{ requests: MechRequestRow[] }>(
+          url,
+          leaderboardMechRequestsAtQuery,
+          {
+            sender,
+            timestamp: String(timestamp),
+            idGt,
+          },
+          deadline,
+        ),
       ),
   });
   return {
@@ -445,7 +466,7 @@ export const fetchOmenMarketAnswers = (marketIds: string[], deadline: number) =>
         answerFinalizedTimestamp: string | null;
         isPendingArbitration: boolean;
       }[];
-    }>(OMEN_SUBGRAPH_URL, leaderboardOmenFinalizationQuery, { ids });
+    }>(OMEN_SUBGRAPH_URL, leaderboardOmenFinalizationQuery, { ids }, deadline);
     return fixedProductMarketMakers.map((market) => [
       market.id,
       {
@@ -469,7 +490,7 @@ export const fetchPolymarketQuestions = (questionIds: string[], deadline: number
         metadata: { title: string | null } | null;
         resolution: { winningIndex: string | null } | null;
       }[];
-    }>(POLYMARKET_SQUID_URL, leaderboardPolymarketQuestionsQuery, { ids });
+    }>(POLYMARKET_SQUID_URL, leaderboardPolymarketQuestionsQuery, { ids }, deadline);
     return questions.map(({ id, metadata, resolution }) => {
       const winningIndex = resolution?.winningIndex;
       return [
@@ -542,11 +563,16 @@ export const fetchMarketBets = async (
                 amount: string;
                 fixedProductMarketMaker: { id: string };
               }[];
-            }>(PREDICT_OMEN_SUBGRAPH_URL, leaderboardOmenBetsQuery, {
-              bettor,
-              markets,
-              idGt,
-            })
+            }>(
+              PREDICT_OMEN_SUBGRAPH_URL,
+              leaderboardOmenBetsQuery,
+              {
+                bettor,
+                markets,
+                idGt,
+              },
+              deadline,
+            )
           ).bets,
       });
       if (!complete) break;
@@ -564,11 +590,16 @@ export const fetchMarketBets = async (
                 amount: string;
                 questionId: string;
               }[];
-            }>(POLYMARKET_SQUID_URL, leaderboardPolymarketBetsQuery, {
-              bettor,
-              questions: markets,
-              idGt,
-            })
+            }>(
+              POLYMARKET_SQUID_URL,
+              leaderboardPolymarketBetsQuery,
+              {
+                bettor,
+                questions: markets,
+                idGt,
+              },
+              deadline,
+            )
           ).bets,
       });
       if (!complete) break;

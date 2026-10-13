@@ -49,6 +49,7 @@ import {
 import { parseStoredPins } from '../utils/leaderboard/pins.ts';
 import { assignRanks, getNotRankedReason, searchByName } from '../utils/leaderboard/ranking.ts';
 import { isCronAuthorized } from '../utils/leaderboard/respond.ts';
+import { HttpStatusError, isTransientError, withRetry } from '../utils/leaderboard/retry.ts';
 import { isValidBuilderState, isValidSnapshot } from '../utils/leaderboard/validate.ts';
 import { getAgentRecords, getLeaderboardPage } from '../utils/leaderboard/views.ts';
 
@@ -896,4 +897,42 @@ test('a builder state read back must have the expected shape', () => {
   ]) {
     assert.equal(isValidBuilderState(bad), false, JSON.stringify(bad));
   }
+});
+
+test('withRetry retries transient errors before the deadline only', async () => {
+  const noSleep = async () => {};
+  const failing = (errors) => {
+    let calls = 0;
+    const attempt = async () => {
+      calls += 1;
+      if (errors.length) throw errors.shift();
+      return 'ok';
+    };
+    return { attempt, calls: () => calls };
+  };
+  const far = Date.now() + 60_000;
+  const flaky = failing([new HttpStatusError(503, 'u'), new TypeError('fetch failed')]);
+  assert.equal(await withRetry(flaky.attempt, { deadline: far, sleep: noSleep }), 'ok');
+  assert.equal(flaky.calls(), 3);
+  // Out of retries
+  const down = failing([1, 2, 3].map(() => new HttpStatusError(502, 'u')));
+  await assert.rejects(withRetry(down.attempt, { deadline: far, sleep: noSleep }), HttpStatusError);
+  assert.equal(down.calls(), 3);
+  // Not transient
+  const bad = failing([new HttpStatusError(400, 'u')]);
+  await assert.rejects(withRetry(bad.attempt, { deadline: far, sleep: noSleep }));
+  assert.equal(bad.calls(), 1);
+  // A retry that would start after the deadline is not made
+  const late = failing([new HttpStatusError(500, 'u')]);
+  await assert.rejects(withRetry(late.attempt, { deadline: Date.now() + 500, sleep: noSleep }));
+  assert.equal(late.calls(), 1);
+
+  const graphqlError = Object.assign(new Error('x'), { response: { status: 200 } });
+  const gatewayError = Object.assign(new Error('x'), { response: { status: 504 } });
+  const timeout = Object.assign(new Error('x'), { name: 'TimeoutError' });
+  assert.equal(isTransientError(graphqlError), false);
+  assert.equal(isTransientError(gatewayError), true);
+  assert.equal(isTransientError(timeout), true);
+  assert.equal(isTransientError(new HttpStatusError(429, 'u')), true);
+  assert.equal(isTransientError(new HttpStatusError(404, 'u')), false);
 });
