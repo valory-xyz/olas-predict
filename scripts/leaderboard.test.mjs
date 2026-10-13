@@ -37,6 +37,11 @@ import {
 import { parseStoredPins } from '../utils/leaderboard/pins.ts';
 import { assignRanks, getNotRankedReason, searchByName } from '../utils/leaderboard/ranking.ts';
 import { pageById, pageByTimestamp } from '../utils/leaderboard/paging.ts';
+import {
+  PENDING_MARKET_MAX_RECHECK_MS,
+  needsMarketCheck,
+  recordMarketMiss,
+} from '../utils/leaderboard/pending.ts';
 import { isCronAuthorized } from '../utils/leaderboard/respond.ts';
 import { isValidSnapshot } from '../utils/leaderboard/validate.ts';
 import { getAgentRecords, getLeaderboardPage } from '../utils/leaderboard/views.ts';
@@ -755,4 +760,20 @@ test('id paging follows the id cursor and reports a deadline stop as incomplete'
     fetchPage,
   });
   assert.deepEqual(cut, { rows: rows.slice(0, 10), complete: false });
+});
+
+test('a market left untallied is looked up again with a doubling wait, up to a day', () => {
+  const HOUR = 3600_000;
+  assert.equal(needsMarketCheck(undefined, 0), true);
+  let check = recordMarketMiss(undefined, 0);
+  assert.deepEqual(check, [0, 1]);
+  // The next hourly run, even if it starts a little early
+  assert.equal(needsMarketCheck(check, HOUR - 60_000), true);
+  assert.equal(needsMarketCheck(check, HOUR / 2), false);
+  check = recordMarketMiss(check, HOUR);
+  assert.equal(needsMarketCheck(check, 2 * HOUR), false);
+  assert.equal(needsMarketCheck(check, 3 * HOUR), true);
+  for (let i = 0; i < 10; i++) check = recordMarketMiss(check, 0);
+  assert.equal(needsMarketCheck(check, PENDING_MARKET_MAX_RECHECK_MS - HOUR), false);
+  assert.equal(needsMarketCheck(check, PENDING_MARKET_MAX_RECHECK_MS), true);
 });

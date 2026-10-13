@@ -22,9 +22,12 @@ import {
   needsPearlLookup,
   recordPearlLookup,
 } from './pearl';
+import { needsMarketCheck, recordMarketMiss } from './pending';
 import type { BuilderState } from './snapshot';
 import {
   DeadlineError,
+  type Lookup,
+  type PolymarketQuestion,
   fetchDailyStatistics,
   fetchMarketBets,
   fetchMechRequests,
@@ -103,7 +106,9 @@ const updateMechRequests = async (
 
 /**
  * Tallies the agents' bets on markets that now have a final answer and were not tallied yet.
- * Markets without a final answer are retried on the next run. `false` when time ran out.
+ * Markets left untallied (no final answer yet, or no bets returned) are looked up again with
+ * a growing interval (see `needsMarketCheck`). `prefetched` holds Polymarket questions this run
+ * already read, which are scored without another lookup. `false` when time ran out.
  */
 const updateTallies = async (
   agentType: AgentType,
@@ -111,11 +116,19 @@ const updateTallies = async (
   marketsByAgent: Map<string, string[]>,
   nowSeconds: number,
   deadline: number,
+  prefetched?: Lookup<PolymarketQuestion>,
 ) => {
+  const now = Date.now();
+  const checks = (state.pendingMarkets ??= {});
+  const prefetchedIds = new Set(prefetched?.checked);
   const pendingByAgent = new Map<string, string[]>();
   marketsByAgent.forEach((markets, address) => {
     const tallied = state.tallies[address] ?? {};
-    const pending = markets.filter((marketId) => !tallied[marketId]);
+    const pending = markets.filter(
+      (marketId) =>
+        !tallied[marketId] &&
+        (prefetchedIds.has(marketId) || needsMarketCheck(checks[marketId], now)),
+    );
     if (pending.length) pendingByAgent.set(address, pending);
   });
   const pendingMarkets = [...new Set([...pendingByAgent.values()].flat())];
@@ -141,11 +154,12 @@ const updateTallies = async (
       });
     };
   } else {
-    const { found: questions, checked: checkedMarkets } = await fetchPolymarketQuestions(
-      pendingMarkets,
+    const fetched = await fetchPolymarketQuestions(
+      pendingMarkets.filter((id) => !prefetchedIds.has(id)),
       deadline,
     );
-    checked = checkedMarkets;
+    const questions = new Map([...(prefetched?.found ?? []), ...fetched.found]);
+    checked = [...pendingMarkets.filter((id) => prefetchedIds.has(id)), ...fetched.checked];
     questions.forEach(({ title }, questionId) => {
       if (title) state.titles[questionId] = toTitleKey(title);
     });
@@ -158,12 +172,17 @@ const updateTallies = async (
   const checkedSet = new Set(checked);
   const isFinal = (marketId: string) =>
     checkedSet.has(marketId) && scoreMarket(marketId, []) !== null;
+  // Looked up this run and still untallied for some agent
+  const missed = new Set<string>();
 
   const done = await mapWithConcurrency(
     [...pendingByAgent.entries()],
     AGENT_CONCURRENCY,
     async ([address, pending]) => {
       if (isPastDeadline(deadline)) return false;
+      pending
+        .filter((marketId) => checkedSet.has(marketId) && !isFinal(marketId))
+        .forEach((marketId) => missed.add(marketId));
       const finalMarkets = pending.filter(isFinal);
       if (!finalMarkets.length) return true;
       const { bets, fetchedMarkets } = await fetchMarketBets(
@@ -178,26 +197,35 @@ const updateTallies = async (
           scoreMarket(marketId, outcomeIndexes),
         );
         if (tally) tallied[marketId] = tally;
+        else missed.add(marketId);
       });
       return fetchedMarkets.length === finalMarkets.length;
     },
   );
+  checked.forEach((marketId) => {
+    if (missed.has(marketId)) checks[marketId] = recordMarketMiss(checks[marketId], now);
+    else delete checks[marketId];
+  });
   return checked.length === pendingMarkets.length && done.every(Boolean);
 };
 
-/** Titles of Polymarket questions not seen before; `false` when time ran out */
+/**
+ * Titles of Polymarket questions not seen before; `complete` is `false` when time ran out.
+ * Also returns the lookup, so the tallies can reuse it.
+ */
 const updatePolymarketTitles = async (
   state: BuilderState,
   questionIds: string[],
   deadline: number,
 ) => {
   const missing = questionIds.filter((id) => !state.titles[id]);
-  if (!missing.length) return true;
-  const { found, checked } = await fetchPolymarketQuestions(missing, deadline);
-  found.forEach(({ title }, questionId) => {
+  const lookup: Lookup<PolymarketQuestion> = missing.length
+    ? await fetchPolymarketQuestions(missing, deadline)
+    : { found: new Map(), checked: [] };
+  lookup.found.forEach(({ title }, questionId) => {
     if (title) state.titles[questionId] = toTitleKey(title);
   });
-  return checked.length === missing.length;
+  return { complete: lookup.checked.length === missing.length, lookup };
 };
 
 /** Drops working state that no longer matters for the 1Y window */
@@ -221,6 +249,10 @@ const pruneState = (
   const liveMarkets = new Set([...marketsByAgent.values()].flat());
   Object.keys(state.titles).forEach((marketId) => {
     if (!liveMarkets.has(marketId)) delete state.titles[marketId];
+  });
+  const pendingMarkets = state.pendingMarkets ?? {};
+  Object.keys(pendingMarkets).forEach((marketId) => {
+    if (!liveMarkets.has(marketId)) delete pendingMarkets[marketId];
   });
 };
 
@@ -268,20 +300,22 @@ export const buildLeaderboard = async (
     ]),
   );
 
-  const titlesComplete =
+  const titles =
     agentType === AGENTS.POLYSTRAT
       ? await updatePolymarketTitles(
           state,
           [...new Set([...marketsByAgent.values()].flat())],
           deadline,
         )
-      : true;
+      : null;
+  const titlesComplete = titles?.complete ?? true;
   const talliesComplete = await updateTallies(
     agentType,
     state,
     marketsByAgent,
     nowSeconds,
     deadline,
+    titles?.lookup,
   );
   const mechComplete = await updateMechRequests(
     agentType,

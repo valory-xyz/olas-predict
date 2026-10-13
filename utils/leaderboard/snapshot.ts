@@ -10,6 +10,7 @@ import { LEADERBOARD_BLOB_PREFIX, LEADERBOARD_STATE_SCHEMA_VERSION } from 'const
 import type { LeaderboardSnapshot } from 'types/leaderboard';
 
 import type { PearlLookup } from './pearl';
+import type { PendingMarketCheck } from './pending';
 import { isValidSnapshot } from './validate';
 
 /** How long a warm function trusts its in-memory snapshot before checking Blob again */
@@ -29,6 +30,11 @@ export type BuilderState = {
   tallies: Record<string, Record<string, [number, number, number]>>;
   /** Polymarket question id -> title key (Omen titles come with the daily statistics) */
   titles: Record<string, string>;
+  /**
+   * Settled markets not tallied yet, by market id: when they were last looked up and how many
+   * lookups in a row left them untallied. Absent in states saved before it existed.
+   */
+  pendingMarkets?: Record<string, PendingMarketCheck>;
 };
 
 export const createEmptyState = (): BuilderState => ({
@@ -37,6 +43,7 @@ export const createEmptyState = (): BuilderState => ({
   mech: {},
   tallies: {},
   titles: {},
+  pendingMarkets: {},
 });
 
 const getSnapshotPath = (agentType: AgentType) =>
