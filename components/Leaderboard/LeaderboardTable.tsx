@@ -1,14 +1,14 @@
-import { InfoCircleOutlined, PushpinFilled, PushpinOutlined } from '@ant-design/icons';
+import { PushpinFilled, PushpinOutlined } from '@ant-design/icons';
 import { Button, Flex, Table, Tooltip, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
+import Image from 'next/image';
 import Link from 'next/link';
 import { CSSProperties, ReactNode } from 'react';
-import Jazzicon, { jsNumberForAddress } from 'react-jazzicon';
 import styled, { keyframes } from 'styled-components';
 
 import { AGENTS, AgentType, NA, POLYGON_SCAN_URL } from 'constants/index';
 import { NOT_RANKED_COPY, RankBy } from 'constants/leaderboard';
-import { MEDIA_QUERY } from 'constants/theme';
+import { COLOR, MEDIA_QUERY } from 'constants/theme';
 import { useScreen } from 'hooks/useScreen';
 import type { LeaderboardRow } from 'types/leaderboard';
 
@@ -24,6 +24,9 @@ const NEGATIVE = '#ff6b6b';
 const STICKY_BG = '#2b1a4d';
 const PINNED_BG = '#3a2a5c';
 const PINNED_FLASH_BG = '#6a5c86';
+/** Hovered rows stand out clearly, as in the design */
+const ROW_HOVER_BG = '#3f2d63';
+const PINNED_HOVER_BG = '#5b4a7d';
 /** Pinned rows stay at the top only up to this many; more lead the list instead */
 const MAX_STICKY_PINNED_ROWS = 5;
 
@@ -52,6 +55,10 @@ const StyledTable = styled(Table<LeaderboardRow>)`
   .ant-table-cell {
     white-space: nowrap;
   }
+  .ant-table-thead > tr > th {
+    color: ${COLOR.WHITE_TRANSPARENT_50};
+    font-weight: 400;
+  }
   .ant-table-sticky-holder,
   .ant-table-header,
   .ant-table-thead > tr > th {
@@ -67,6 +74,14 @@ const StyledTable = styled(Table<LeaderboardRow>)`
   .pinned-row > td,
   .ant-table-tbody > tr.pinned-row > td.ant-table-cell-fix-left {
     background: ${PINNED_BG};
+  }
+  .ant-table-tbody > tr.ant-table-row:hover > td,
+  .ant-table-tbody > tr.ant-table-row:hover > td.ant-table-cell-fix-left {
+    background: ${ROW_HOVER_BG};
+  }
+  .pinned-row:hover > td,
+  .ant-table-tbody > tr.pinned-row:hover > td.ant-table-cell-fix-left {
+    background: ${PINNED_HOVER_BG};
   }
   .pinned-row-flash > td,
   .ant-table-tbody > tr.pinned-row-flash > td.ant-table-cell-fix-left {
@@ -99,11 +114,10 @@ const BRIER_HELP =
   'result)², where the result is 1 for a won bet and 0 for a lost one. It is computed from the ' +
   'market price at trade time. Lower is better; 0 is perfect.';
 
+/** The explanation shows on hovering the header; the design has no icon there */
 const HeaderWithHelp = ({ label, help }: { label: string; help: string }) => (
   <Tooltip title={help}>
-    <span>
-      {label} <InfoCircleOutlined aria-label={`About ${label}`} />
-    </span>
+    <span style={{ cursor: 'help' }}>{label}</span>
   </Tooltip>
 );
 
@@ -113,7 +127,7 @@ const AgentLabel = styled.span`
   gap: 12px;
   min-width: 0;
 
-  > b {
+  > span {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -124,6 +138,17 @@ const AgentLabel = styled.span`
   }
 `;
 
+/** Every agent of a type shares that type's icon, as in the design */
+const AGENT_ICONS: Record<AgentType, string> = {
+  [AGENTS.OMENSTRAT]: '/images/omenstrat-icon.png',
+  [AGENTS.POLYSTRAT]: '/images/polystrat-icon.png',
+};
+
+const AgentIcon = styled(Image)`
+  flex-shrink: 0;
+  border-radius: 6px;
+`;
+
 const getDisplayName = (row: LeaderboardRow) =>
   row.name || `${row.address.slice(0, 6)}…${row.address.slice(-4)}`;
 
@@ -131,8 +156,8 @@ const AgentName = ({ row, agentType }: { row: LeaderboardRow; agentType: AgentTy
   const name = getDisplayName(row);
   const label = (
     <AgentLabel title={name}>
-      <Jazzicon diameter={24} seed={jsNumberForAddress(row.address)} />
-      <b>{name}</b>
+      <AgentIcon src={AGENT_ICONS[agentType]} width={24} height={24} alt="" aria-hidden />
+      <span>{name}</span>
     </AgentLabel>
   );
   // /agents/[id] resolves Omen agents only, so a Polystrat agent links to its Safe
@@ -220,7 +245,7 @@ const getColumns = ({
       key: 'rank',
       width: widths.rank,
       fixed: 'left',
-      className: 'text-end',
+      align: 'right',
       render: (_: unknown, row: LeaderboardRow) => <Text type="secondary">{row.rank ?? '—'}</Text>,
     },
     {
@@ -235,21 +260,21 @@ const getColumns = ({
       title: <RankedHeader label="ROI" isRanked={rankBy === 'roi'} />,
       key: 'roi',
       width: widths.roi,
-      className: 'text-end',
+      align: 'right',
       ...metricCell((row) => <Signed value={row.roi!}>{formatPercent(row.roi!)}</Signed>, true),
     },
     {
       title: <RankedHeader label="PnL" isRanked={rankBy === 'pnl'} />,
       key: 'pnl',
       width: widths.pnl,
-      className: 'text-end',
+      align: 'right',
       ...metricCell((row) => <Signed value={row.pnl!}>{formatUsd(row.pnl!)}</Signed>, false),
     },
     {
       title: 'Accuracy',
       key: 'accuracy',
       width: widths.accuracy,
-      className: 'text-end',
+      align: 'right',
       ...metricCell(
         (row) => (row.accuracy === null ? NA : `${Math.round(row.accuracy * 100)}%`),
         false,
@@ -259,28 +284,28 @@ const getColumns = ({
       title: <HeaderWithHelp label="Brier score" help={BRIER_HELP} />,
       key: 'brierScore',
       width: widths.brierScore,
-      className: 'text-end',
+      align: 'right',
       ...metricCell((row) => (row.brierScore === null ? NA : row.brierScore.toFixed(2)), false),
     },
     {
       title: 'Avg trade size',
       key: 'avgTradeSize',
       width: widths.avgTradeSize,
-      className: 'text-end',
+      align: 'right',
       ...metricCell((row) => (row.avgTradeSize === null ? NA : formatUsd(row.avgTradeSize)), false),
     },
     {
       title: 'Volume',
       key: 'volume',
       width: widths.volume,
-      className: 'text-end',
+      align: 'right',
       ...metricCell((row) => formatUsd(row.volume ?? 0), false),
     },
     {
       title: 'Trades',
       key: 'trades',
       width: widths.trades,
-      className: 'text-end',
+      align: 'right',
       ...metricCell((row) => (row.trades ?? 0).toLocaleString('en-US'), false),
     },
   ] as ColumnsType<LeaderboardRow>;
@@ -389,6 +414,7 @@ export const LeaderboardTable = ({
                         index={index}
                         colSpan={cellProps.colSpan as number | undefined}
                         className={column.className}
+                        align={column.align}
                       >
                         {column.render?.(undefined, row, index) as ReactNode}
                       </Table.Summary.Cell>

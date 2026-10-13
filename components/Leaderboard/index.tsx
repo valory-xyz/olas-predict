@@ -1,3 +1,4 @@
+import { CheckCircleFilled } from '@ant-design/icons';
 import { Flex, Typography, message } from 'antd';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import styled from 'styled-components';
@@ -18,6 +19,25 @@ const { Title, Text } = Typography;
 const SEARCH_DEBOUNCE_MS = 300;
 const ARRIVAL_FLASH_MS = 2000;
 const ARRIVAL_TOAST_SECONDS = 5;
+
+/** The arrival toast from the design: a light pill at the bottom centre */
+const ArrivalToast = styled.div`
+  position: fixed;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100vw - 32px);
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: #fff;
+  color: #1f1f1f;
+  font-size: 14px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+`;
 
 // The shared card hides overflow, which would break the sticky header and pinned rows
 const LeaderboardCard = styled(Card)`
@@ -99,14 +119,20 @@ export const Leaderboard = ({
     setFlashAddress(arrivalAddress);
   }, [arrivalAddress, arePinsLoaded, addPin, agentType]);
 
+  const [arrivalToast, setArrivalToast] = useState<string | null>(null);
+  useEffect(() => {
+    if (!arrivalToast) return;
+    const timeout = setTimeout(() => setArrivalToast(null), ARRIVAL_TOAST_SECONDS * 1000);
+    return () => clearTimeout(timeout);
+  }, [arrivalToast]);
+
   const arrivalRecord = pinned.data?.find((record) => record.address === flashAddress);
   useEffect(() => {
     if (!flashAddress || !arrivalRecord) return;
-    messageApi.success(
+    setArrivalToast(
       arrivalRecord.name
         ? `Your agent ${arrivalRecord.name} is pinned to the top`
         : 'Your agent is pinned to the top',
-      ARRIVAL_TOAST_SECONDS,
     );
     const timeout = setTimeout(() => setFlashAddress(null), ARRIVAL_FLASH_MS);
     return () => clearTimeout(timeout);
@@ -146,6 +172,12 @@ export const Leaderboard = ({
   return (
     <Flex vertical gap={24} className="flex-auto">
       {messageHolder}
+      {arrivalToast && (
+        <ArrivalToast role="status">
+          <CheckCircleFilled style={{ color: '#52c41a' }} />
+          {arrivalToast}
+        </ArrivalToast>
+      )}
       <Title level={2} className="m-0 text-center">
         Leaderboard
       </Title>
@@ -168,11 +200,10 @@ export const Leaderboard = ({
           </Text>
         ) : (
           <>
-            {firstPage && (
+            {/* The design has no count above the table; while searching, say how many match */}
+            {firstPage && search && (
               <Text type="secondary">
-                {search
-                  ? `${firstPage.totalResults.toLocaleString('en-US')} of ${firstPage.totalRanked.toLocaleString('en-US')} ranked agents match`
-                  : `${firstPage.totalRanked.toLocaleString('en-US')} ranked agents`}
+                {`${firstPage.totalResults.toLocaleString('en-US')} of ${firstPage.totalRanked.toLocaleString('en-US')} ranked agents match`}
               </Text>
             )}
             {pinned.isError && (
