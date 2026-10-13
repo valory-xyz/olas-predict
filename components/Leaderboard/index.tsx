@@ -140,19 +140,25 @@ export const Leaderboard = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flashAddress, Boolean(arrivalRecord)]);
 
-  // Pinned rows: ranked ones by rank under the current settings, then the not-ranked ones
-  const pinnedRows: PinnedRow[] = useMemo(() => {
-    const rows = (pinned.data ?? []).map((record) => ({
-      ...toPinnedRow(record, rankBy),
-      flash: record.address === flashAddress,
-    }));
-    return [
-      ...rows.filter((row) => row.rank !== null).sort((a, b) => a.rank! - b.rank!),
-      ...rows.filter((row) => row.rank === null),
-    ];
-  }, [pinned.data, rankBy, flashAddress]);
-
   const rows = useMemo(() => list.data?.pages.flatMap((page) => page.agents) ?? [], [list.data]);
+
+  // Pinned rows: ranked ones by rank under the current settings, then the not-ranked ones.
+  // Built from the current pins, so an unpinned agent goes at once; an agent pinned from the list
+  // shows its list row until the pinned-agents answer (with every pin) arrives.
+  const pinnedRows: PinnedRow[] = useMemo(() => {
+    const records = new Map(
+      (pinned.data ?? []).map((record) => [record.address, toPinnedRow(record, rankBy)]),
+    );
+    const listRows = new Map(rows.map((row) => [row.address, row]));
+    const pinnedList = pinnedAddresses.flatMap((address) => {
+      const row = records.get(address) ?? listRows.get(address);
+      return row ? [{ ...row, flash: address === flashAddress }] : [];
+    });
+    return [
+      ...pinnedList.filter((row) => row.rank !== null).sort((a, b) => a.rank! - b.rank!),
+      ...pinnedList.filter((row) => row.rank === null),
+    ];
+  }, [pinned.data, rows, pinnedAddresses, rankBy, flashAddress]);
   const firstPage = list.data?.pages[0];
 
   const onTogglePin = useCallback(

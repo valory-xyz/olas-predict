@@ -31,6 +31,12 @@ export const useLeaderboardAgents = ({
   return useQuery({
     queryKey: ['leaderboardAgents', agentType, window, valid],
     enabled: valid.length > 0,
+    // Pinning or unpinning changes the key: keep showing the previous pins meanwhile, but never
+    // ranks from another agent type or window
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[1] === agentType && previousQuery?.queryKey[2] === window
+        ? previous
+        : undefined,
     retry: shouldRetryLeaderboard,
     queryFn: async (): Promise<LeaderboardAgentRecord[]> => {
       const batches: string[][] = [];
