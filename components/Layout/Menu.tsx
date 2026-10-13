@@ -72,7 +72,6 @@ const TopCard = styled(Flex)`
   .run-your-own-agent {
     padding: 6px 12px;
     border-radius: 8px;
-    border: 1px solid ${COLOR.WHITE_TRANSPARENT_20};
     background: ${COLOR.WHITE_TRANSPARENT_10};
   }
 `;

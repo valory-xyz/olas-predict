@@ -67,6 +67,25 @@ export const CustomLayout = styled(AntdLayout).withConfig({
     `
     overflow: visible;
     overflow-x: clip;
+
+    /*
+     * This element grows with the page here, so a background sized to it would re-scale
+     * (and visibly shift) whenever the content height changes, e.g. when an agent is pinned.
+     * Paint it on a layer fixed to the viewport instead.
+     */
+    background-image: none;
+    isolation: isolate;
+    &::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      background-color: ${COLOR.BACKGROUND};
+      background-image: url('/images/background.png');
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+    }
   `}
 `;
 
