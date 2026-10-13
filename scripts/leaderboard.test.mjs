@@ -53,7 +53,7 @@ import { isValidBuilderState, isValidSnapshot } from '../utils/leaderboard/valid
 import { getAgentRecords, getLeaderboardPage } from '../utils/leaderboard/views.ts';
 
 const DAY = SECONDS_PER_DAY;
-const TODAY = 1791504000; // 2026-10-08 00:00 UTC
+const TODAY = 1791504000; // 2026-10-09 00:00 UTC
 const NOW = TODAY + 12 * 3600;
 
 const day = (date, overrides = {}) => ({
@@ -480,7 +480,7 @@ const entry = (rankByRoi, rankByPnl, notRankedReason = null) => ({
 const snapshot = {
   schemaVersion: 1,
   agentType: 'omenstrat',
-  updatedAt: '2026-10-08T12:00:00.000Z',
+  updatedAt: '2026-10-09T12:00:00.000Z', // NOW
   sourceHeight: 1,
   totalRanked: { '7d': 2, '30d': 2, '90d': 2, '1y': 2 },
   excluded: ['0x8'],
