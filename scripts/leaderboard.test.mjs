@@ -821,3 +821,28 @@ test('a 409 restarts the list only from a newer snapshot than the one shown', ()
   assert.equal(shouldRestartFromSnapshot(undefined, shown), false);
   assert.equal(shouldRestartFromSnapshot(shown, undefined), true);
 });
+
+test('a snapshot window entry pairs ranks and metrics with the absence of a reason', () => {
+  const withEntry = (windowEntry) => ({
+    ...snapshot,
+    agents: [
+      {
+        ...snapshot.agents[0],
+        windows: { ...snapshot.agents[0].windows, '7d': windowEntry },
+      },
+    ],
+  });
+  const ranked = entry(1, 2);
+  const valid = (windowEntry) => isValidSnapshot(withEntry(windowEntry), 'omenstrat');
+  assert.equal(valid(ranked), true);
+  assert.equal(valid(entry(null, null, 'not_ranked_yet')), true);
+  // Ranked without ranks or metrics
+  assert.equal(valid({ ...ranked, rankByRoi: null }), false);
+  assert.equal(valid({ ...ranked, metrics: null }), false);
+  assert.equal(valid({ ...ranked, metrics: {} }), false);
+  assert.equal(valid({ ...ranked, metrics: { ...ranked.metrics, roi: '0.1' } }), false);
+  assert.equal(valid({ ...ranked, metrics: { ...ranked.metrics, accuracy: undefined } }), false);
+  // A reason with ranks or metrics
+  assert.equal(valid({ ...ranked, notRankedReason: 'not_ranked_yet' }), false);
+  assert.equal(valid({ ...ranked, notRankedReason: 'other' }), false);
+});

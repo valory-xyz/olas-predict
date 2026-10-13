@@ -14,12 +14,30 @@ const isNullableNumber = (value: unknown) => value === null || typeof value === 
 
 const NOT_RANKED_REASON_VALUES: unknown[] = Object.values(NOT_RANKED_REASONS);
 
-const isWindowEntry = (value: unknown) =>
+const isMetrics = (value: unknown) =>
   isRecord(value) &&
-  (value.metrics === null || isRecord(value.metrics)) &&
-  isNullableNumber(value.rankByRoi) &&
-  isNullableNumber(value.rankByPnl) &&
-  (value.notRankedReason === null || NOT_RANKED_REASON_VALUES.includes(value.notRankedReason));
+  typeof value.roi === 'number' &&
+  typeof value.pnl === 'number' &&
+  isNullableNumber(value.accuracy) &&
+  isNullableNumber(value.brierScore) &&
+  isNullableNumber(value.avgTradeSize) &&
+  typeof value.volume === 'number' &&
+  typeof value.trades === 'number';
+
+/** A ranked entry has both ranks and its metrics; a not-ranked one has a reason and none */
+const isWindowEntry = (value: unknown) => {
+  if (!isRecord(value)) return false;
+  const { metrics, rankByRoi, rankByPnl, notRankedReason } = value;
+  if (notRankedReason === null) {
+    return typeof rankByRoi === 'number' && typeof rankByPnl === 'number' && isMetrics(metrics);
+  }
+  return (
+    NOT_RANKED_REASON_VALUES.includes(notRankedReason) &&
+    rankByRoi === null &&
+    rankByPnl === null &&
+    metrics === null
+  );
+};
 
 const isSnapshotAgent = (value: unknown) =>
   isRecord(value) &&
