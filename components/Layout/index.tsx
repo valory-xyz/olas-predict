@@ -5,11 +5,11 @@ import styled from 'styled-components';
 
 import { MENU_MAX_WIDTH } from 'constants/index';
 import { LEADERBOARD_PATH } from 'constants/leaderboard';
-import { BREAK_POINT, COLOR, MEDIA_QUERY } from 'constants/theme';
+import { COLOR, MEDIA_QUERY } from 'constants/theme';
 import { useScreen } from 'hooks/useScreen';
 
 import { Footer } from './Footer';
-import { Menu, MobileMenu } from './Menu';
+import { Menu, MobileMenu, TopMenu } from './Menu';
 
 const { Content, Sider } = AntdLayout;
 
@@ -58,44 +58,29 @@ export const CustomLayout = styled(AntdLayout).withConfig({
   }
 
   /*
-   * Without the sider the window scrolls, not this element; as a scroll container it would
-   * still be the box sticky elements stick to, so the leaderboard's sticky header and pinned
-   * rows would never stick. Clipping keeps the horizontal clipping without that.
+   * Wide pages have no side menu, so the window scrolls, not this element; as a scroll
+   * container it would still be the box sticky elements stick to, so the leaderboard's sticky
+   * header and pinned rows would never stick. Clipping keeps the horizontal clipping without that.
    */
   ${({ isWide }) =>
     isWide &&
     `
-    @media (max-width: ${parseInt(BREAK_POINT.xl, 10) - 1}px) {
-      overflow: visible;
-      overflow-x: clip;
-    }
+    overflow: visible;
+    overflow-x: clip;
   `}
 `;
 
 const LEADERBOARD_MAX_WIDTH = 1200;
-/** Space kept on the left of the leaderboard for the fixed menu, from the content box edge */
-const MENU_CLEARANCE = MENU_MAX_WIDTH + 16;
 
 const ContentInner = styled.div.withConfig({
-  shouldForwardProp: (prop) => !['isWide', 'hasSider'].includes(prop),
-})<{ isWide: boolean; hasSider: boolean }>`
+  shouldForwardProp: (prop) => !['isWide'].includes(prop),
+})<{ isWide: boolean }>`
   display: flex;
   flex-direction: column;
   flex: auto;
   margin: 0 auto;
   max-width: ${({ isWide }) => (isWide ? `${LEADERBOARD_MAX_WIDTH}px` : '720px')};
   width: 100%;
-
-  /* The wide leaderboard is centred when there is room, otherwise it keeps clear of the menu */
-  ${({ isWide, hasSider }) =>
-    isWide &&
-    hasSider &&
-    `
-    max-width: none;
-    width: min(${LEADERBOARD_MAX_WIDTH}px, calc(100% - ${MENU_CLEARANCE}px));
-    margin-left: max(${MENU_CLEARANCE}px, calc((100% - ${LEADERBOARD_MAX_WIDTH}px) / 2));
-    margin-right: 0;
-  `}
 `;
 
 const BetaBanner = styled.div`
@@ -116,19 +101,21 @@ export const Layout = ({ children }: LayoutProps) => {
   const { isDesktop } = useScreen();
   const { pathname } = useRouter();
   const isWide = pathname === LEADERBOARD_PATH;
+  // Wide pages use the horizontal top menu from the design instead of the side menu
+  const hasSider = !!isDesktop && !isWide;
 
   return (
     <CustomLayout isWide={isWide}>
-      <AntdLayout hasSider={isDesktop}>
-        {isDesktop && (
+      <AntdLayout hasSider={hasSider}>
+        {hasSider && (
           <Sider width={MENU_MAX_WIDTH}>
             <Menu />
           </Sider>
         )}
         <Content>
-          <ContentInner isWide={isWide} hasSider={!!isDesktop}>
+          <ContentInner isWide={isWide}>
             <BetaBanner>Beta</BetaBanner>
-            {!isDesktop && <MobileMenu />}
+            {isDesktop ? isWide && <TopMenu /> : <MobileMenu />}
             {children}
           </ContentInner>
           <Footer />
