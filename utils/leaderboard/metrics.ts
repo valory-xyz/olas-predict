@@ -154,10 +154,15 @@ export const computeWindowMetrics = ({
     brierSum += day.brierSum;
     brierCount += day.brierCount;
     let dayBuyCost = 0;
+    // Buy cost of the day's markets that settle again later and are counted there instead
+    let laterBuyCost = 0;
     let isDayBuyCostKnown = day.markets.length > 0;
     new Set(day.markets).forEach((marketId) => {
-      if (lastSettlementDays.get(marketId) !== day.date) return;
       const tally = tallies[marketId];
+      if (lastSettlementDays.get(marketId) !== day.date) {
+        laterBuyCost += tally?.[2] ?? 0;
+        return;
+      }
       if (!tally) {
         isDayBuyCostKnown = false;
         return;
@@ -167,8 +172,12 @@ export const computeWindowMetrics = ({
       dayBuyCost += tally[2];
     });
     // Without every market's buy cost, fall back to the day's settled cost: it is net of sell
-    // proceeds, so never more than the gross cost
-    const netSettled = day.tradedSettled + day.feesSettled;
+    // proceeds, so never more than the gross cost. It also holds the markets that settle again
+    // on a later day, where their buy cost is added: take theirs out, so they are not counted
+    // twice. Their net share of the day is unknown and at most their buy cost, so this keeps the
+    // fallback a lower bound. An untallied market that settles again is counted in both days'
+    // fallbacks (its share of either day is unknown); a later lookup that tallies it fixes that.
+    const netSettled = day.tradedSettled + day.feesSettled - laterBuyCost;
     buyCost += isDayBuyCostKnown ? dayBuyCost : Math.max(dayBuyCost, netSettled, 0);
   });
 

@@ -158,6 +158,19 @@ test('without a market buy cost, the day falls back to its non-negative settled 
   assert.equal(metricsFor(days, { tallies: { m1: [1, 1, 4] } }).settledCost, 13);
 });
 
+test('a fallback day leaves out the buy cost of a market counted on a later settlement', () => {
+  // m1 settles on day 1 and again on day 3 (answer changed); day 1 also has m2 without a tally
+  const days = [
+    day(TODAY - 2 * DAY, { tradedSettled: 12, markets: ['m1', 'm2'] }),
+    day(TODAY, { tradedSettled: 10, markets: ['m1'] }),
+  ];
+  // Day 1: max(0, 12 - 10) for m2; day 3: m1's buy cost once
+  assert.equal(metricsFor(days, { tallies: { m1: [1, 1, 10] } }).settledCost, 2 + 10);
+  // Never below zero when the later market's buy cost exceeds the day's net
+  const small = [day(TODAY - DAY, { tradedSettled: 4, markets: ['m1', 'm2'] }), days[1]];
+  assert.equal(metricsFor(small, { tallies: { m1: [1, 1, 10] } }).settledCost, 10);
+});
+
 const RANK_RULE = { minSettledBets: MIN_SETTLED_BETS_PER_WINDOW };
 
 test('an agent needs a settled cost above zero to be ranked, however small', () => {
