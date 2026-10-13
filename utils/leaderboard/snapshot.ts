@@ -11,7 +11,7 @@ import type { LeaderboardSnapshot } from 'types/leaderboard';
 
 import type { PearlLookup } from './pearl';
 import type { PendingMarketCheck } from './pending';
-import { isValidSnapshot } from './validate';
+import { isRecord, isValidBuilderState, isValidSnapshot } from './validate';
 
 /** How long a warm function trusts its in-memory snapshot before checking Blob again */
 const SNAPSHOT_MEMO_TTL_MS = 60_000;
@@ -84,11 +84,30 @@ const writeJsonBlob = async (pathname: string, data: unknown) => {
   });
 };
 
+/**
+ * The saved working state, or an empty one when there is none, it has an older schema, or it is
+ * unreadable (truncated JSON, wrong shape), so a bad save cannot make every refresh fail. A
+ * failed Blob request still throws: starting over then would overwrite a good state.
+ */
 export const readBuilderState = async (agentType: AgentType): Promise<BuilderState> => {
   const blob = await headBlob(getStatePath(agentType));
   if (!blob) return createEmptyState();
-  const state = await fetchBlobJson<BuilderState>(blob.url, blob.uploadedAt.toISOString());
-  return state.schemaVersion === LEADERBOARD_STATE_SCHEMA_VERSION ? state : createEmptyState();
+  let state: unknown;
+  try {
+    state = await fetchBlobJson<unknown>(blob.url, blob.uploadedAt.toISOString());
+  } catch (error) {
+    if (!(error instanceof SyntaxError)) throw error;
+    console.error(`Leaderboard: ${agentType} builder state is not JSON, starting over`, error);
+    return createEmptyState();
+  }
+  if (isRecord(state) && state.schemaVersion !== LEADERBOARD_STATE_SCHEMA_VERSION) {
+    return createEmptyState();
+  }
+  if (!isValidBuilderState(state)) {
+    console.error(`Leaderboard: ${agentType} builder state has an invalid shape, starting over`);
+    return createEmptyState();
+  }
+  return state;
 };
 
 export const writeBuilderState = (agentType: AgentType, state: BuilderState) =>

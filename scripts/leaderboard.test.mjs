@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { INVALID_ANSWER_HEX } from '../constants/index.ts';
-import { MECH_FEE_USD, MIN_SETTLED_BETS_PER_WINDOW } from '../constants/leaderboard.ts';
+import {
+  LEADERBOARD_STATE_SCHEMA_VERSION,
+  MECH_FEE_USD,
+  MIN_SETTLED_BETS_PER_WINDOW,
+} from '../constants/leaderboard.ts';
 import { generateAgentName } from '../utils/agentName.ts';
 import { computeSnapshot } from '../utils/leaderboard/compute.ts';
 import {
@@ -45,7 +49,7 @@ import {
   recordMarketMiss,
 } from '../utils/leaderboard/pending.ts';
 import { isCronAuthorized } from '../utils/leaderboard/respond.ts';
-import { isValidSnapshot } from '../utils/leaderboard/validate.ts';
+import { isValidBuilderState, isValidSnapshot } from '../utils/leaderboard/validate.ts';
 import { getAgentRecords, getLeaderboardPage } from '../utils/leaderboard/views.ts';
 
 const DAY = SECONDS_PER_DAY;
@@ -845,4 +849,43 @@ test('a snapshot window entry pairs ranks and metrics with the absence of a reas
   // A reason with ranks or metrics
   assert.equal(valid({ ...ranked, notRankedReason: 'not_ranked_yet' }), false);
   assert.equal(valid({ ...ranked, notRankedReason: 'other' }), false);
+});
+
+test('a builder state read back must have the expected shape', () => {
+  const state = {
+    schemaVersion: LEADERBOARD_STATE_SCHEMA_VERSION,
+    pearl: {
+      1: { status: 'pearl', checkedAt: 1, failures: 0 },
+      2: { status: null, checkedAt: 1, failures: 3 },
+    },
+    mech: {
+      '0x1': {
+        syncedTo: 5,
+        requests: [
+          ['abc', 4],
+          ['', 5],
+        ],
+      },
+    },
+    tallies: { '0x1': { m1: [1, 2, 3.5] } },
+    titles: { q1: 'abc' },
+    pendingMarkets: { m2: [1, 2] },
+  };
+  assert.equal(isValidBuilderState(state), true);
+  // States saved before pendingMarkets existed
+  assert.equal(isValidBuilderState({ ...state, pendingMarkets: undefined }), true);
+  for (const bad of [
+    null,
+    [],
+    { ...state, schemaVersion: LEADERBOARD_STATE_SCHEMA_VERSION - 1 },
+    { ...state, mech: undefined },
+    { ...state, mech: { '0x1': { syncedTo: 5 } } },
+    { ...state, mech: { '0x1': { syncedTo: 5, requests: [['abc']] } } },
+    { ...state, pearl: { 1: { status: 'maybe', checkedAt: 1, failures: 0 } } },
+    { ...state, tallies: { '0x1': { m1: [1, 2] } } },
+    { ...state, titles: { q1: 1 } },
+    { ...state, pendingMarkets: { m2: [1] } },
+  ]) {
+    assert.equal(isValidBuilderState(bad), false, JSON.stringify(bad));
+  }
 });
