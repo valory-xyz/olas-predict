@@ -12,6 +12,7 @@ import {
   getWindowStart,
   tallyOmenBets,
   tallyPolymarketBets,
+  toMarketTally,
 } from '../utils/leaderboard/metrics.ts';
 import {
   findRepeatedParam,
@@ -238,6 +239,17 @@ test('Polymarket tallies skip unresolved and invalid (winningIndex < 0) question
   assert.deepEqual(tallyPolymarketBets({ outcomeIndexes: [0, 1, 0], winningIndex: 0 }), [2, 3]);
   assert.equal(tallyPolymarketBets({ outcomeIndexes: [0], winningIndex: null }), null);
   assert.deepEqual(tallyPolymarketBets({ outcomeIndexes: [0], winningIndex: -1 }), [0, 0]);
+});
+
+test('a final market without returned bets is left untallied, so it is retried', () => {
+  const score = (outcomeIndexes) => tallyPolymarketBets({ outcomeIndexes, winningIndex: 1 });
+  assert.equal(toMarketTally(undefined, score), null);
+  assert.deepEqual(toMarketTally({ outcomeIndexes: [1, 0], buyCost: 3 }, score), [1, 2, 3]);
+  // Not final: nothing to store either
+  assert.equal(
+    toMarketTally({ outcomeIndexes: [1], buyCost: 3 }, () => null),
+    null,
+  );
 });
 
 const candidate = (address, settledBets, { roi = 0, pnl = 0, trades = 0, active = true } = {}) => ({

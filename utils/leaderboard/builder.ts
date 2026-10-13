@@ -13,6 +13,7 @@ import {
   getWindowStart,
   tallyOmenBets,
   tallyPolymarketBets,
+  toMarketTally,
 } from './metrics';
 import {
   classifyService,
@@ -173,9 +174,10 @@ const updateTallies = async (
       );
       const tallied = (state.tallies[address] ??= {});
       fetchedMarkets.forEach((marketId) => {
-        const marketBets = bets.get(marketId);
-        const tally = scoreMarket(marketId, marketBets?.outcomeIndexes ?? []);
-        if (tally) tallied[marketId] = [...tally, marketBets?.buyCost ?? 0];
+        const tally = toMarketTally(bets.get(marketId), (outcomeIndexes) =>
+          scoreMarket(marketId, outcomeIndexes),
+        );
+        if (tally) tallied[marketId] = tally;
       });
       return fetchedMarkets.length === finalMarkets.length;
     },

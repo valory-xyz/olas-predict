@@ -199,6 +199,21 @@ export const computeWindowMetrics = ({
 };
 
 /**
+ * The stored tally of one agent on one market with a final answer, from its bets there and
+ * `score` (`tallyOmenBets` or `tallyPolymarketBets`). `null` when no bets came back for a market
+ * the agent settled on (indexer lag between entities, an id the filter missed): the market stays
+ * untallied, so a later run looks it up again rather than store a zero buy cost for good.
+ */
+export const toMarketTally = (
+  bets: { outcomeIndexes: number[]; buyCost: number } | undefined,
+  score: (outcomeIndexes: number[]) => [number, number] | null,
+): [number, number, number] | null => {
+  if (!bets) return null;
+  const tally = score(bets.outcomeIndexes);
+  return tally && [...tally, bets.buyCost];
+};
+
+/**
  * Won/counted tally for one agent's bets on one Omen market, following the agent's
  * `_calculate_omen_accuracy`: only finalized, non-arbitrated, non-invalid answers count.
  * Returns `null` while the answer is not final, so the caller can retry later.
