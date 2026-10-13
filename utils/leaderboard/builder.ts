@@ -23,6 +23,7 @@ import {
 } from './pearl';
 import type { BuilderState } from './snapshot';
 import {
+  DeadlineError,
   fetchDailyStatistics,
   fetchMarketBets,
   fetchMechRequests,
@@ -72,7 +73,10 @@ const updatePearlFlags = async (
   return serviceIds.every((id) => !isPearlLookupPending(state.pearl[id]));
 };
 
-/** Fetches each agent's new mech requests; `false` when time ran out */
+/**
+ * Fetches each agent's new mech requests; `false` when time ran out. An agent cut short keeps
+ * the requests fetched so far and resumes from them on the next run.
+ */
 const updateMechRequests = async (
   agentType: AgentType,
   state: BuilderState,
@@ -83,19 +87,15 @@ const updateMechRequests = async (
   const done = await mapWithConcurrency(agents, AGENT_CONCURRENCY, async (address) => {
     if (isPastDeadline(deadline)) return false;
     const entry = state.mech[address] ?? { syncedTo: keepFrom, requests: [] };
-    const fetched = await fetchMechRequests(agentType, address, entry.syncedTo);
+    const fetched = await fetchMechRequests(agentType, address, entry.syncedTo, deadline);
     const requests = entry.requests.filter(([, timestamp]) => timestamp >= keepFrom);
     // A request without a question title cannot be matched to a market; an empty key charges
     // it to its own day
-    fetched.forEach(({ title, timestamp }) =>
+    fetched.requests.forEach(({ title, timestamp }) =>
       requests.push([title ? toTitleKey(title) : '', timestamp]),
     );
-    const syncedTo = fetched.reduce(
-      (max, { timestamp }) => Math.max(max, timestamp),
-      entry.syncedTo,
-    );
-    state.mech[address] = { syncedTo, requests };
-    return true;
+    state.mech[address] = { syncedTo: fetched.syncedTo, requests };
+    return fetched.complete;
   });
   return done.every(Boolean);
 };
@@ -122,8 +122,13 @@ const updateTallies = async (
 
   // Which pending markets have a final answer, and how to score a bet on each of them
   let scoreMarket: (marketId: string, outcomeIndexes: number[]) => [number, number] | null;
+  let checked: string[];
   if (agentType === AGENTS.OMENSTRAT) {
-    const answers = await fetchOmenMarketAnswers(pendingMarkets);
+    const { found: answers, checked: checkedMarkets } = await fetchOmenMarketAnswers(
+      pendingMarkets,
+      deadline,
+    );
+    checked = checkedMarkets;
     scoreMarket = (marketId, outcomeIndexes) => {
       const answer = answers.get(marketId);
       if (!answer) return null;
@@ -135,7 +140,11 @@ const updateTallies = async (
       });
     };
   } else {
-    const questions = await fetchPolymarketQuestions(pendingMarkets);
+    const { found: questions, checked: checkedMarkets } = await fetchPolymarketQuestions(
+      pendingMarkets,
+      deadline,
+    );
+    checked = checkedMarkets;
     questions.forEach(({ title }, questionId) => {
       if (title) state.titles[questionId] = toTitleKey(title);
     });
@@ -145,7 +154,9 @@ const updateTallies = async (
       return tallyPolymarketBets({ outcomeIndexes, winningIndex: question.winningIndex });
     };
   }
-  const isFinal = (marketId: string) => scoreMarket(marketId, []) !== null;
+  const checkedSet = new Set(checked);
+  const isFinal = (marketId: string) =>
+    checkedSet.has(marketId) && scoreMarket(marketId, []) !== null;
 
   const done = await mapWithConcurrency(
     [...pendingByAgent.entries()],
@@ -154,17 +165,22 @@ const updateTallies = async (
       if (isPastDeadline(deadline)) return false;
       const finalMarkets = pending.filter(isFinal);
       if (!finalMarkets.length) return true;
-      const bets = await fetchMarketBets(agentType, address, finalMarkets);
+      const { bets, fetchedMarkets } = await fetchMarketBets(
+        agentType,
+        address,
+        finalMarkets,
+        deadline,
+      );
       const tallied = (state.tallies[address] ??= {});
-      finalMarkets.forEach((marketId) => {
+      fetchedMarkets.forEach((marketId) => {
         const marketBets = bets.get(marketId);
         const tally = scoreMarket(marketId, marketBets?.outcomeIndexes ?? []);
         if (tally) tallied[marketId] = [...tally, marketBets?.buyCost ?? 0];
       });
-      return true;
+      return fetchedMarkets.length === finalMarkets.length;
     },
   );
-  return done.every(Boolean);
+  return checked.length === pendingMarkets.length && done.every(Boolean);
 };
 
 /** Titles of Polymarket questions not seen before; `false` when time ran out */
@@ -175,12 +191,11 @@ const updatePolymarketTitles = async (
 ) => {
   const missing = questionIds.filter((id) => !state.titles[id]);
   if (!missing.length) return true;
-  if (isPastDeadline(deadline)) return false;
-  const questions = await fetchPolymarketQuestions(missing);
-  questions.forEach(({ title }, questionId) => {
+  const { found, checked } = await fetchPolymarketQuestions(missing, deadline);
+  found.forEach(({ title }, questionId) => {
     if (title) state.titles[questionId] = toTitleKey(title);
   });
-  return true;
+  return checked.length === missing.length;
 };
 
 /** Drops working state that no longer matters for the 1Y window */
@@ -219,8 +234,16 @@ export const buildLeaderboard = async (
   const nowSeconds = Math.floor(Date.now() / 1000);
   const yearStart = getWindowStart(nowSeconds, LEADERBOARD_WINDOW_DAYS['1y']);
 
-  const population = await fetchTraderAgents(agentType);
-  const statistics = await fetchDailyStatistics(agentType, yearStart, nowSeconds);
+  let population;
+  let statistics;
+  try {
+    population = await fetchTraderAgents(agentType, deadline);
+    statistics = await fetchDailyStatistics(agentType, yearStart, nowSeconds, deadline);
+  } catch (error) {
+    // Nothing was fetched into the state yet: the next run starts over
+    if (error instanceof DeadlineError) return { state, snapshot: null, unresolvedServices: [] };
+    throw error;
+  }
 
   // Only agents with activity in the longest window can appear on the leaderboard
   const activeAgents = population.agents.filter(({ address }) =>

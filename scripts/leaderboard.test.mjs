@@ -35,6 +35,7 @@ import {
 } from '../utils/leaderboard/pearl.ts';
 import { parseStoredPins } from '../utils/leaderboard/pins.ts';
 import { assignRanks, getNotRankedReason, searchByName } from '../utils/leaderboard/ranking.ts';
+import { pageById, pageByTimestamp } from '../utils/leaderboard/paging.ts';
 import { isCronAuthorized } from '../utils/leaderboard/respond.ts';
 import { isValidSnapshot } from '../utils/leaderboard/validate.ts';
 import { getAgentRecords, getLeaderboardPage } from '../utils/leaderboard/views.ts';
@@ -630,4 +631,116 @@ test('the refresh route accepts only the exact cron bearer secret', () => {
   // An unset secret never authorizes, even against an empty bearer
   assert.equal(isCronAuthorized('Bearer ', undefined), false);
   assert.equal(isCronAuthorized('Bearer ', ''), false);
+});
+
+// A fake indexer: rows sorted by timestamp only, ties in no particular order (reverse id here)
+const fakeTimestampSource = (rows, pageSize) => {
+  const byTimestamp = [...rows].sort((a, b) => a.timestamp - b.timestamp || (a.id < b.id ? 1 : -1));
+  const byId = [...rows].sort((a, b) => (a.id < b.id ? -1 : 1));
+  const calls = { after: 0, at: 0 };
+  return {
+    calls,
+    fetchAfter: async (timestampGt) => {
+      calls.after++;
+      return byTimestamp.filter((row) => row.timestamp > timestampGt).slice(0, pageSize);
+    },
+    fetchAt: async (timestamp, idGt) => {
+      calls.at++;
+      return byId.filter((row) => row.timestamp === timestamp && row.id > idGt).slice(0, pageSize);
+    },
+  };
+};
+
+const timestampRows = (count, perTimestamp) =>
+  Array.from({ length: count }, (_, i) => ({
+    id: `r${String(i).padStart(6, '0')}`,
+    timestamp: 1000 + Math.floor(i / perTimestamp),
+  }));
+
+test('timestamp paging returns every row once across page boundaries and shared timestamps', async () => {
+  for (const [count, perTimestamp, pageSize] of [
+    [6500, 3, 1000],
+    [25, 4, 5],
+    [12, 12, 5],
+    [10, 1, 5],
+    [0, 1, 5],
+  ]) {
+    const rows = timestampRows(count, perTimestamp);
+    const source = fakeTimestampSource(rows, pageSize);
+    const result = await pageByTimestamp({
+      timestampGt: 0,
+      pageSize,
+      isPastDeadline: () => false,
+      ...source,
+    });
+    const label = `${count}/${perTimestamp}/${pageSize}`;
+    assert.equal(result.complete, true, label);
+    assert.deepEqual(
+      result.rows.map((row) => row.id).sort(),
+      rows.map((row) => row.id),
+      label,
+    );
+    assert.equal(result.syncedTo, count ? rows[count - 1].timestamp : 0, label);
+  }
+});
+
+test('timestamp paging resumes from syncedTo without gaps or repeats', async () => {
+  const rows = timestampRows(40, 3);
+  const source = fakeTimestampSource(rows, 5);
+  let pages = 0;
+  const first = await pageByTimestamp({
+    timestampGt: 0,
+    pageSize: 5,
+    // Out of time after two pages
+    isPastDeadline: () => pages++ >= 2,
+    ...source,
+  });
+  assert.equal(first.complete, false);
+  assert.ok(first.rows.length > 0 && first.rows.length < rows.length);
+  // Everything up to syncedTo is there, nothing after it
+  assert.deepEqual(
+    first.rows.map((row) => row.id).sort(),
+    rows.filter((row) => row.timestamp <= first.syncedTo).map((row) => row.id),
+  );
+  const rest = await pageByTimestamp({
+    timestampGt: first.syncedTo,
+    pageSize: 5,
+    isPastDeadline: () => false,
+    ...source,
+  });
+  assert.equal(rest.complete, true);
+  assert.deepEqual(
+    [...first.rows, ...rest.rows].map((row) => row.id).sort(),
+    rows.map((row) => row.id),
+  );
+});
+
+test('timestamp paging stops before the first page once the deadline passed', async () => {
+  const source = fakeTimestampSource(timestampRows(10, 1), 5);
+  const result = await pageByTimestamp({
+    timestampGt: 7,
+    pageSize: 5,
+    isPastDeadline: () => true,
+    ...source,
+  });
+  assert.deepEqual(result, { rows: [], syncedTo: 7, complete: false });
+  assert.equal(source.calls.after, 0);
+});
+
+test('id paging follows the id cursor and reports a deadline stop as incomplete', async () => {
+  const rows = timestampRows(23, 1);
+  const fetchPage = async (idGt) => rows.filter((row) => row.id > idGt).slice(0, 5);
+  const all = await pageById({
+    pageSize: 5,
+    isPastDeadline: () => false,
+    fetchPage,
+  });
+  assert.deepEqual(all, { rows, complete: true });
+  let pages = 0;
+  const cut = await pageById({
+    pageSize: 5,
+    isPastDeadline: () => pages++ >= 2,
+    fetchPage,
+  });
+  assert.deepEqual(cut, { rows: rows.slice(0, 10), complete: false });
 });

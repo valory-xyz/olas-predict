@@ -689,13 +689,14 @@ export const leaderboardOmenDailyStatisticsQuery = gql`
 `;
 
 export const leaderboardOmenBetsQuery = gql`
-  query LeaderboardOmenBets($bettor: String!, $markets: [String!]!, $skip: Int!) {
+  query LeaderboardOmenBets($bettor: String!, $markets: [String!]!, $idGt: ID!) {
     bets(
       first: 1000
-      skip: $skip
       orderBy: id
-      where: { bettor: $bettor, fixedProductMarketMaker_in: $markets }
+      orderDirection: asc
+      where: { bettor: $bettor, fixedProductMarketMaker_in: $markets, id_gt: $idGt }
     ) {
+      id
       outcomeIndex
       amount
       feeAmount
@@ -765,13 +766,13 @@ export const leaderboardPolymarketQuestionsQuery = gql`
 `;
 
 export const leaderboardPolymarketBetsQuery = gql`
-  query LeaderboardPolymarketBets($bettor: String!, $questions: [String!]!, $offset: Int!) {
+  query LeaderboardPolymarketBets($bettor: String!, $questions: [String!]!, $idGt: String!) {
     bets(
       limit: 1000
-      offset: $offset
       orderBy: id_ASC
-      where: { bettorId_eq: $bettor, questionId_in: $questions }
+      where: { bettorId_eq: $bettor, questionId_in: $questions, id_gt: $idGt }
     ) {
+      id
       outcomeIndex
       amount
       questionId
@@ -780,13 +781,30 @@ export const leaderboardPolymarketBetsQuery = gql`
 `;
 
 export const leaderboardMechRequestsQuery = gql`
-  query LeaderboardMechRequests($sender: String!, $timestampGt: BigInt!, $skip: Int!) {
+  query LeaderboardMechRequests($sender: String!, $timestampGt: BigInt!) {
     requests(
       first: 1000
-      skip: $skip
       orderBy: blockTimestamp
       orderDirection: asc
       where: { sender: $sender, blockTimestamp_gt: $timestampGt }
+    ) {
+      id
+      blockTimestamp
+      parsedRequest {
+        questionTitle
+      }
+    }
+  }
+`;
+
+/** The rest of one timestamp's requests, for a page that ended inside that timestamp */
+export const leaderboardMechRequestsAtQuery = gql`
+  query LeaderboardMechRequestsAt($sender: String!, $timestamp: BigInt!, $idGt: ID!) {
+    requests(
+      first: 1000
+      orderBy: id
+      orderDirection: asc
+      where: { sender: $sender, blockTimestamp: $timestamp, id_gt: $idGt }
     ) {
       id
       blockTimestamp

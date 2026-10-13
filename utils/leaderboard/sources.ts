@@ -4,6 +4,7 @@
  */
 import { type Variables, request } from 'graphql-request';
 import {
+  leaderboardMechRequestsAtQuery,
   leaderboardMechRequestsQuery,
   leaderboardOmenBetsQuery,
   leaderboardOmenDailyStatisticsQuery,
@@ -36,6 +37,7 @@ import { publicClient } from 'constants/viemConfig';
 
 import type { AgentDay } from './metrics';
 import { SECONDS_PER_DAY } from './metrics';
+import { pageById, pageByTimestamp } from './paging';
 
 const PAGE_SIZE = 1000;
 /** `id_in` / `_in` filters are chunked to stay well inside the indexers' limits */
@@ -54,6 +56,17 @@ const OMEN_DAILY_STATS_DAYS_PER_STREAM = 30;
 
 const gqlRequest = <T>(url: string, document: string, variables: Variables) =>
   request<T>({ url, document, variables, signal: AbortSignal.timeout(GRAPHQL_TIMEOUT_MS) });
+
+/** Thrown by a fetcher whose result is needed whole when `deadline` passes before it is done */
+export class DeadlineError extends Error {
+  constructor() {
+    super('Leaderboard refresh deadline passed');
+  }
+}
+
+const assertBeforeDeadline = (deadline: number) => {
+  if (Date.now() >= deadline) throw new DeadlineError();
+};
 
 export const chunk = <T>(items: T[], size: number): T[][] => {
   const chunks: T[][] = [];
@@ -108,13 +121,18 @@ export type AgentPopulation = {
   sourceHeight: number | null;
 };
 
-export const fetchTraderAgents = async (agentType: AgentType): Promise<AgentPopulation> => {
+/** Every trader agent of the type; throws `DeadlineError` once `deadline` (epoch ms) passes */
+export const fetchTraderAgents = async (
+  agentType: AgentType,
+  deadline: number,
+): Promise<AgentPopulation> => {
   const agents: TraderAgentRecord[] = [];
   let sourceHeight: number | null = null;
 
   if (agentType === AGENTS.OMENSTRAT) {
     let idGt = '0x';
     for (;;) {
+      assertBeforeDeadline(deadline);
       const page = await gqlRequest<{
         traderAgents: { id: string; serviceId: string }[];
         _meta: { block: { number: number } };
@@ -131,6 +149,7 @@ export const fetchTraderAgents = async (agentType: AgentType): Promise<AgentPopu
 
   let idGt = '';
   for (;;) {
+    assertBeforeDeadline(deadline);
     const page = await gqlRequest<{
       traderAgents: { id: string; serviceId: string }[];
       squidStatus: { height: number };
@@ -184,11 +203,15 @@ const pushDay = (daysByAgent: Map<string, AgentDay[]>, address: string, day: Age
   else daysByAgent.set(address, [day]);
 };
 
-/** Every agent's daily statistics from `dateGte` (UTC midnight, seconds) onwards */
+/**
+ * Every agent's daily statistics from `dateGte` (UTC midnight, seconds) onwards; throws
+ * `DeadlineError` once `deadline` (epoch ms) passes
+ */
 export const fetchDailyStatistics = async (
   agentType: AgentType,
   dateGte: number,
   nowSeconds: number,
+  deadline: number,
 ): Promise<DailyStatistics> => {
   const decimals = TOKEN_DECIMALS[agentType];
   const daysByAgent = new Map<string, AgentDay[]>();
@@ -212,6 +235,7 @@ export const fetchDailyStatistics = async (
       const rows: OmenDailyStatisticRow[] = [];
       let idGt = '';
       for (;;) {
+        assertBeforeDeadline(deadline);
         const page = await gqlRequest<{ dailyProfitStatistics: OmenDailyStatisticRow[] }>(
           PREDICT_OMEN_SUBGRAPH_URL,
           leaderboardOmenDailyStatisticsQuery,
@@ -245,6 +269,7 @@ export const fetchDailyStatistics = async (
 
   let idGt = '';
   for (;;) {
+    assertBeforeDeadline(deadline);
     const page = await gqlRequest<{ dailyProfitStatistics: PolymarketDailyStatisticRow[] }>(
       POLYMARKET_SQUID_URL,
       leaderboardPolymarketDailyStatisticsQuery,
@@ -342,36 +367,56 @@ export const fetchServiceMetadata = async (
 /** `title` is `null` for a request whose question title could not be parsed */
 export type MechRequestRecord = { title: string | null; timestamp: number };
 
-/** The agent's mech requests after `timestampGt`, oldest first */
+type MechRequestRow = {
+  id: string;
+  blockTimestamp: string;
+  parsedRequest: { questionTitle: string | null } | null;
+};
+
+/**
+ * The agent's mech requests after `timestampGt`, oldest first, and the timestamp up to which
+ * they are complete. Pages by timestamp cursor (see `pageByTimestamp`) and stops between pages
+ * at `deadline` (epoch ms), with `complete: false`; resume from `syncedTo`.
+ */
 export const fetchMechRequests = async (
   agentType: AgentType,
   sender: string,
   timestampGt: number,
-): Promise<MechRequestRecord[]> => {
+  deadline: number,
+): Promise<{ requests: MechRequestRecord[]; syncedTo: number; complete: boolean }> => {
   const url =
     agentType === AGENTS.OMENSTRAT ? OLAS_MECH_SUBGRAPH_URL : OLAS_MECH_POLYGON_SUBGRAPH_URL;
-  const requests: MechRequestRecord[] = [];
-  for (let skip = 0; ; skip += PAGE_SIZE) {
-    const page = await gqlRequest<{
-      requests: {
-        blockTimestamp: string;
-        parsedRequest: { questionTitle: string | null } | null;
-      }[];
-    }>(url, leaderboardMechRequestsQuery, {
-      sender,
-      timestampGt: String(timestampGt),
-      skip,
-    });
-    page.requests.forEach(({ blockTimestamp, parsedRequest }) => {
-      // Every request is paid for, even one whose question could not be parsed
-      requests.push({
-        title: parsedRequest?.questionTitle || null,
-        timestamp: Number(blockTimestamp),
-      });
-    });
-    if (page.requests.length < PAGE_SIZE) break;
-  }
-  return requests;
+  const toRows = ({ requests }: { requests: MechRequestRow[] }) =>
+    requests.map((row) => ({ ...row, timestamp: Number(row.blockTimestamp) }));
+  const { rows, syncedTo, complete } = await pageByTimestamp({
+    timestampGt,
+    pageSize: PAGE_SIZE,
+    isPastDeadline: () => Date.now() >= deadline,
+    fetchAfter: async (after) =>
+      toRows(
+        await gqlRequest<{ requests: MechRequestRow[] }>(url, leaderboardMechRequestsQuery, {
+          sender,
+          timestampGt: String(after),
+        }),
+      ),
+    fetchAt: async (timestamp, idGt) =>
+      toRows(
+        await gqlRequest<{ requests: MechRequestRow[] }>(url, leaderboardMechRequestsAtQuery, {
+          sender,
+          timestamp: String(timestamp),
+          idGt,
+        }),
+      ),
+  });
+  return {
+    // Every request is paid for, even one whose question could not be parsed
+    requests: rows.map(({ parsedRequest, timestamp }) => ({
+      title: parsedRequest?.questionTitle || null,
+      timestamp,
+    })),
+    syncedTo,
+    complete,
+  };
 };
 
 export type OmenMarketAnswer = {
@@ -380,63 +425,75 @@ export type OmenMarketAnswer = {
   isPendingArbitration: boolean;
 };
 
+/** What a by-id lookup found, and which ids it looked up before the deadline */
+export type Lookup<T> = { found: Map<string, T>; checked: string[] };
+
+/**
+ * Looks `ids` up in chunks, skipping the chunks not started by `deadline` (epoch ms): those ids
+ * are not in `checked`, so the caller can tell "not found" from "not looked up".
+ */
+const lookUpByIds = async <T>(
+  ids: string[],
+  deadline: number,
+  fetchChunk: (chunkIds: string[]) => Promise<[string, T][]>,
+): Promise<Lookup<T>> => {
+  const found = new Map<string, T>();
+  const checked: string[] = [];
+  await mapWithConcurrency(chunk(ids, IN_FILTER_CHUNK), 4, async (chunkIds) => {
+    if (Date.now() >= deadline) return;
+    (await fetchChunk(chunkIds)).forEach(([id, value]) => found.set(id.toLowerCase(), value));
+    checked.push(...chunkIds);
+  });
+  return { found, checked };
+};
+
 /** Answer and finalization of Omen markets, from the Omen subgraph */
-export const fetchOmenMarketAnswers = async (
-  marketIds: string[],
-): Promise<Map<string, OmenMarketAnswer>> => {
-  const answers = new Map<string, OmenMarketAnswer>();
-  const pages = await mapWithConcurrency(chunk(marketIds, IN_FILTER_CHUNK), 4, (ids) =>
-    gqlRequest<{
+export const fetchOmenMarketAnswers = (marketIds: string[], deadline: number) =>
+  lookUpByIds<OmenMarketAnswer>(marketIds, deadline, async (ids) => {
+    const { fixedProductMarketMakers } = await gqlRequest<{
       fixedProductMarketMakers: {
         id: string;
         currentAnswer: string | null;
         answerFinalizedTimestamp: string | null;
         isPendingArbitration: boolean;
       }[];
-    }>(OMEN_SUBGRAPH_URL, leaderboardOmenFinalizationQuery, { ids }),
-  );
-  pages.forEach(({ fixedProductMarketMakers }) =>
-    fixedProductMarketMakers.forEach((market) =>
-      answers.set(market.id.toLowerCase(), {
+    }>(OMEN_SUBGRAPH_URL, leaderboardOmenFinalizationQuery, { ids });
+    return fixedProductMarketMakers.map((market) => [
+      market.id,
+      {
         currentAnswer: market.currentAnswer,
         answerFinalizedTimestamp: market.answerFinalizedTimestamp
           ? Number(market.answerFinalizedTimestamp)
           : null,
         isPendingArbitration: market.isPendingArbitration,
-      }),
-    ),
-  );
-  return answers;
-};
+      },
+    ]);
+  });
 
 export type PolymarketQuestion = { title: string; winningIndex: number | null };
 
 /** Title and resolution of Polymarket questions, from the squid */
-export const fetchPolymarketQuestions = async (
-  questionIds: string[],
-): Promise<Map<string, PolymarketQuestion>> => {
-  const questions = new Map<string, PolymarketQuestion>();
-  const pages = await mapWithConcurrency(chunk(questionIds, IN_FILTER_CHUNK), 4, (ids) =>
-    gqlRequest<{
+export const fetchPolymarketQuestions = (questionIds: string[], deadline: number) =>
+  lookUpByIds<PolymarketQuestion>(questionIds, deadline, async (ids) => {
+    const { questions } = await gqlRequest<{
       questions: {
         id: string;
         metadata: { title: string | null } | null;
         resolution: { winningIndex: string | null } | null;
       }[];
-    }>(POLYMARKET_SQUID_URL, leaderboardPolymarketQuestionsQuery, { ids }),
-  );
-  pages.forEach((page) =>
-    page.questions.forEach(({ id, metadata, resolution }) => {
+    }>(POLYMARKET_SQUID_URL, leaderboardPolymarketQuestionsQuery, { ids });
+    return questions.map(({ id, metadata, resolution }) => {
       const winningIndex = resolution?.winningIndex;
-      questions.set(id.toLowerCase(), {
-        title: metadata?.title ?? '',
-        winningIndex:
-          winningIndex === null || winningIndex === undefined ? null : Number(winningIndex),
-      });
-    }),
-  );
-  return questions;
-};
+      return [
+        id,
+        {
+          title: metadata?.title ?? '',
+          winningIndex:
+            winningIndex === null || winningIndex === undefined ? null : Number(winningIndex),
+        },
+      ];
+    });
+  });
 
 export type MarketBets = {
   /** Outcome index of each of the agent's bets */
@@ -445,14 +502,20 @@ export type MarketBets = {
   buyCost: number;
 };
 
-/** The agent's bets by market id, for the given markets */
+/**
+ * The agent's bets by market id, for the given markets, and the markets whose bets were all
+ * read. Stops between pages at `deadline` (epoch ms): the markets of an unfinished chunk are
+ * left out of `fetchedMarkets`, so the caller retries them.
+ */
 export const fetchMarketBets = async (
   agentType: AgentType,
   bettor: string,
   marketIds: string[],
-): Promise<Map<string, MarketBets>> => {
+  deadline: number,
+): Promise<{ bets: Map<string, MarketBets>; fetchedMarkets: string[] }> => {
   const decimals = TOKEN_DECIMALS[agentType];
   const bets = new Map<string, MarketBets>();
+  const fetchedMarkets: string[] = [];
   const add = (marketId: string, outcomeIndex: string, amount: string, feeAmount?: string) => {
     const key = marketId.toLowerCase();
     let entry = bets.get(key);
@@ -466,34 +529,58 @@ export const fetchMarketBets = async (
       entry.buyCost += toUnits(amount, decimals) + toUnits(feeAmount ?? '0', decimals);
     }
   };
+  const isPastDeadline = () => Date.now() >= deadline;
 
   for (const markets of chunk(marketIds, IN_FILTER_CHUNK)) {
-    for (let skip = 0; ; skip += PAGE_SIZE) {
-      if (agentType === AGENTS.OMENSTRAT) {
-        const page = await gqlRequest<{
-          bets: {
-            outcomeIndex: string;
-            amount: string;
-            feeAmount: string;
-            fixedProductMarketMaker: { id: string };
-          }[];
-        }>(PREDICT_OMEN_SUBGRAPH_URL, leaderboardOmenBetsQuery, { bettor, markets, skip });
-        page.bets.forEach((bet) =>
-          add(bet.fixedProductMarketMaker.id, bet.outcomeIndex, bet.amount, bet.feeAmount),
-        );
-        if (page.bets.length < PAGE_SIZE) break;
-      } else {
-        const page = await gqlRequest<{
-          bets: { outcomeIndex: string; amount: string; questionId: string }[];
-        }>(POLYMARKET_SQUID_URL, leaderboardPolymarketBetsQuery, {
-          bettor,
-          questions: markets,
-          offset: skip,
-        });
-        page.bets.forEach((bet) => add(bet.questionId, bet.outcomeIndex, bet.amount));
-        if (page.bets.length < PAGE_SIZE) break;
-      }
+    if (agentType === AGENTS.OMENSTRAT) {
+      const { rows, complete } = await pageById({
+        pageSize: PAGE_SIZE,
+        isPastDeadline,
+        fetchPage: async (idGt) =>
+          (
+            await gqlRequest<{
+              bets: {
+                id: string;
+                outcomeIndex: string;
+                amount: string;
+                feeAmount: string;
+                fixedProductMarketMaker: { id: string };
+              }[];
+            }>(PREDICT_OMEN_SUBGRAPH_URL, leaderboardOmenBetsQuery, {
+              bettor,
+              markets,
+              idGt,
+            })
+          ).bets,
+      });
+      if (!complete) break;
+      rows.forEach((bet) =>
+        add(bet.fixedProductMarketMaker.id, bet.outcomeIndex, bet.amount, bet.feeAmount),
+      );
+    } else {
+      const { rows, complete } = await pageById({
+        pageSize: PAGE_SIZE,
+        isPastDeadline,
+        fetchPage: async (idGt) =>
+          (
+            await gqlRequest<{
+              bets: {
+                id: string;
+                outcomeIndex: string;
+                amount: string;
+                questionId: string;
+              }[];
+            }>(POLYMARKET_SQUID_URL, leaderboardPolymarketBetsQuery, {
+              bettor,
+              questions: markets,
+              idGt,
+            })
+          ).bets,
+      });
+      if (!complete) break;
+      rows.forEach((bet) => add(bet.questionId, bet.outcomeIndex, bet.amount));
     }
+    fetchedMarkets.push(...markets);
   }
-  return bets;
+  return { bets, fetchedMarkets };
 };
