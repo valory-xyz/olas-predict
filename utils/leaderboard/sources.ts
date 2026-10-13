@@ -496,7 +496,7 @@ export const fetchPolymarketQuestions = (questionIds: string[], deadline: number
   });
 
 export type MarketBets = {
-  /** Outcome index of each of the agent's bets */
+  /** Outcome index of each of the agent's bets, sells included */
   outcomeIndexes: number[];
   /** What the agent paid for its buys, fees included, in USD; sells are left out */
   buyCost: number;
@@ -523,6 +523,9 @@ export const fetchMarketBets = async (
       entry = { outcomeIndexes: [], buyCost: 0 };
       bets.set(key, entry);
     }
+    // Every bet counts towards accuracy, sells included, as in the trader's own
+    // `_calculate_omen_accuracy` / `_calculate_polymarket_accuracy` (its bet queries carry no
+    // amount), so the leaderboard matches the agent's Profile
     entry.outcomeIndexes.push(Number(outcomeIndex));
     // A sell is a bet with a negative amount (its proceeds)
     if (BigInt(amount) > BigInt(0)) {
