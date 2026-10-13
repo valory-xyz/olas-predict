@@ -91,4 +91,5 @@ export const PEARL_TRADER_SERVICE_PACKAGES: Record<AgentType, string> = {
 export const LEADERBOARD_BLOB_PREFIX = 'leaderboard';
 export const LEADERBOARD_SNAPSHOT_SCHEMA_VERSION = 1;
 // 2: Pearl flags re-evaluated with the trader package name
-export const LEADERBOARD_STATE_SCHEMA_VERSION = 2;
+// 3: tallies carry the buy count, Omen buy cost without the fee counted twice
+export const LEADERBOARD_STATE_SCHEMA_VERSION = 3;

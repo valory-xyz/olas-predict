@@ -174,10 +174,7 @@ type OmenDailyStatisticRow = {
   id: string;
   date: string;
   traderAgent: { id: string };
-  totalBets: number;
-  totalTraded: string;
   dailyTradedSettled: string;
-  dailyFeesSettled: string;
   dailyProfit: string;
   brierSum: string;
   brierCount: number;
@@ -188,8 +185,6 @@ type PolymarketDailyStatisticRow = {
   id: string;
   date: string;
   traderAgentId: string;
-  totalBets: number;
-  totalTraded: string;
   dailyTradedSettled: string;
   dailyProfit: string;
   brierSum: string;
@@ -254,10 +249,7 @@ export const fetchDailyStatistics = async (
       });
       pushDay(daysByAgent, row.traderAgent.id.toLowerCase(), {
         date: Number(row.date),
-        bets: row.totalBets,
-        traded: toUnits(row.totalTraded, decimals),
         tradedSettled: toUnits(row.dailyTradedSettled, decimals),
-        feesSettled: toUnits(row.dailyFeesSettled, decimals),
         profit: toUnits(row.dailyProfit, decimals),
         brierSum: Number(row.brierSum) / BRIER_SCALE,
         brierCount: row.brierCount,
@@ -278,11 +270,7 @@ export const fetchDailyStatistics = async (
     page.dailyProfitStatistics.forEach((row) => {
       pushDay(daysByAgent, row.traderAgentId.toLowerCase(), {
         date: Number(row.date),
-        bets: row.totalBets,
-        traded: toUnits(row.totalTraded, decimals),
         tradedSettled: toUnits(row.dailyTradedSettled, decimals),
-        // The squid indexes no fees
-        feesSettled: 0,
         profit: toUnits(row.dailyProfit, decimals),
         brierSum: Number(row.brierSum) / BRIER_SCALE,
         brierCount: row.brierCount,
@@ -498,8 +486,13 @@ export const fetchPolymarketQuestions = (questionIds: string[], deadline: number
 export type MarketBets = {
   /** Outcome index of each of the agent's bets, sells included */
   outcomeIndexes: number[];
-  /** What the agent paid for its buys, fees included, in USD; sells are left out */
+  /**
+   * What the agent paid for its buys, in USD; sells are left out. An Omen bet's `amount` is the
+   * FPMM's `investmentAmount`, which already includes the market fee.
+   */
   buyCost: number;
+  /** Number of buys */
+  buys: number;
 };
 
 /**
@@ -516,11 +509,11 @@ export const fetchMarketBets = async (
   const decimals = TOKEN_DECIMALS[agentType];
   const bets = new Map<string, MarketBets>();
   const fetchedMarkets: string[] = [];
-  const add = (marketId: string, outcomeIndex: string, amount: string, feeAmount?: string) => {
+  const add = (marketId: string, outcomeIndex: string, amount: string) => {
     const key = marketId.toLowerCase();
     let entry = bets.get(key);
     if (!entry) {
-      entry = { outcomeIndexes: [], buyCost: 0 };
+      entry = { outcomeIndexes: [], buyCost: 0, buys: 0 };
       bets.set(key, entry);
     }
     // Every bet counts towards accuracy, sells included, as in the trader's own
@@ -529,7 +522,8 @@ export const fetchMarketBets = async (
     entry.outcomeIndexes.push(Number(outcomeIndex));
     // A sell is a bet with a negative amount (its proceeds)
     if (BigInt(amount) > BigInt(0)) {
-      entry.buyCost += toUnits(amount, decimals) + toUnits(feeAmount ?? '0', decimals);
+      entry.buyCost += toUnits(amount, decimals);
+      entry.buys += 1;
     }
   };
   const isPastDeadline = () => Date.now() >= deadline;
@@ -546,7 +540,6 @@ export const fetchMarketBets = async (
                 id: string;
                 outcomeIndex: string;
                 amount: string;
-                feeAmount: string;
                 fixedProductMarketMaker: { id: string };
               }[];
             }>(PREDICT_OMEN_SUBGRAPH_URL, leaderboardOmenBetsQuery, {
@@ -557,9 +550,7 @@ export const fetchMarketBets = async (
           ).bets,
       });
       if (!complete) break;
-      rows.forEach((bet) =>
-        add(bet.fixedProductMarketMaker.id, bet.outcomeIndex, bet.amount, bet.feeAmount),
-      );
+      rows.forEach((bet) => add(bet.fixedProductMarketMaker.id, bet.outcomeIndex, bet.amount));
     } else {
       const { rows, complete } = await pageById({
         pageSize: PAGE_SIZE,

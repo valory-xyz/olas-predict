@@ -91,8 +91,9 @@ const StyledTable = styled(Table<LeaderboardRow>)`
 
 export type PinnedRow = LeaderboardRow & { flash?: boolean };
 
+/** Volume and Avg trade size are never negative; a signed figure passes its absolute value */
 const formatUsd = (value: number) =>
-  `$${Math.abs(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const Signed = ({ value, children }: { value: number; children: ReactNode }) => (
   <Text style={{ color: value > 0 ? POSITIVE : value < 0 ? NEGATIVE : undefined }}>
@@ -268,7 +269,10 @@ const getColumns = ({
       key: 'pnl',
       width: widths.pnl,
       align: 'right',
-      ...metricCell((row) => <Signed value={row.pnl!}>{formatUsd(row.pnl!)}</Signed>, false),
+      ...metricCell(
+        (row) => <Signed value={row.pnl!}>{formatUsd(Math.abs(row.pnl!))}</Signed>,
+        false,
+      ),
     },
     {
       title: 'Accuracy',

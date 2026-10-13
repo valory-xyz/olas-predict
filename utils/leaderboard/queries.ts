@@ -35,14 +35,12 @@ export const leaderboardOmenDailyStatisticsQuery = gql`
       traderAgent {
         id
       }
-      totalBets
-      totalTraded
       dailyTradedSettled
-      dailyFeesSettled
       dailyProfit
       brierSum
       brierCount
-      profitParticipants {
+      # A nested list defaults to 100 items on graph-node
+      profitParticipants(first: 1000) {
         id
         question
       }
@@ -61,7 +59,6 @@ export const leaderboardOmenBetsQuery = gql`
       id
       outcomeIndex
       amount
-      feeAmount
       fixedProductMarketMaker {
         id
       }
@@ -102,8 +99,6 @@ export const leaderboardPolymarketDailyStatisticsQuery = gql`
       id
       date
       traderAgentId
-      totalBets
-      totalTraded
       dailyTradedSettled
       dailyProfit
       brierSum

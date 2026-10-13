@@ -9,6 +9,7 @@ import type { AgentType } from 'constants/index';
 import { LEADERBOARD_BLOB_PREFIX, LEADERBOARD_STATE_SCHEMA_VERSION } from 'constants/leaderboard';
 import type { LeaderboardSnapshot } from 'types/leaderboard';
 
+import type { MarketTallies } from './metrics';
 import type { PearlLookup } from './pearl';
 import type { PendingMarketCheck } from './pending';
 import { isRecord, isValidBuilderState, isValidSnapshot } from './validate';
@@ -28,8 +29,8 @@ export type BuilderState = {
   pearl: Record<string, PearlLookup>;
   /** Per agent: mech requests as [title key, timestamp], and the newest timestamp fetched */
   mech: Record<string, { syncedTo: number; requests: [string, number][] }>;
-  /** Per agent: [won, counted bets, buy cost in USD] per market with a final answer */
-  tallies: Record<string, Record<string, [number, number, number]>>;
+  /** Per agent: the tally of each market with a final answer (see `MarketTally`) */
+  tallies: Record<string, MarketTallies>;
   /** Polymarket question id -> title key (Omen titles come with the daily statistics) */
   titles: Record<string, string>;
   /**

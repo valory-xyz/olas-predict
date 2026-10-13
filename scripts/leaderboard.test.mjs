@@ -18,6 +18,7 @@ import {
   tallyPolymarketBets,
   toMarketTally,
 } from '../utils/leaderboard/metrics.ts';
+import { pageById, pageByTimestamp } from '../utils/leaderboard/paging.ts';
 import {
   findRepeatedParam,
   getLeaderboardUrl,
@@ -40,14 +41,13 @@ import {
   needsPearlLookup,
   recordPearlLookup,
 } from '../utils/leaderboard/pearl.ts';
-import { parseStoredPins } from '../utils/leaderboard/pins.ts';
-import { assignRanks, getNotRankedReason, searchByName } from '../utils/leaderboard/ranking.ts';
-import { pageById, pageByTimestamp } from '../utils/leaderboard/paging.ts';
 import {
   PENDING_MARKET_MAX_RECHECK_MS,
   needsMarketCheck,
   recordMarketMiss,
 } from '../utils/leaderboard/pending.ts';
+import { parseStoredPins } from '../utils/leaderboard/pins.ts';
+import { assignRanks, getNotRankedReason, searchByName } from '../utils/leaderboard/ranking.ts';
 import { isCronAuthorized } from '../utils/leaderboard/respond.ts';
 import { isValidBuilderState, isValidSnapshot } from '../utils/leaderboard/validate.ts';
 import { getAgentRecords, getLeaderboardPage } from '../utils/leaderboard/views.ts';
@@ -58,10 +58,7 @@ const NOW = TODAY + 12 * 3600;
 
 const day = (date, overrides = {}) => ({
   date,
-  bets: 0,
-  traded: 0,
   tradedSettled: 0,
-  feesSettled: 0,
   profit: 0,
   brierSum: 0,
   brierCount: 0,
@@ -136,9 +133,9 @@ test('P&L is the window sum of daily profit minus attributed mech fees', () => {
 test('ROI divides P&L by the gross buy cost of the settled markets plus mech fees', () => {
   // The agent bought for 10 (fees included) and sold part before settlement: the source's
   // settled cost is net of the sale
-  const days = [day(TODAY, { profit: 2, tradedSettled: -3, feesSettled: 0.1, markets: ['m1'] })];
+  const days = [day(TODAY, { profit: 2, tradedSettled: -3, markets: ['m1'] })];
   const metrics = metricsFor(days, {
-    tallies: { m1: [1, 1, 10] },
+    tallies: { m1: [1, 1, 10, 1] },
     requests: [{ titleKey: 't1', timestamp: TODAY - DAY }],
     titles: { m1: 't1' },
   });
@@ -151,17 +148,17 @@ test('a market settled on two days adds its buy cost once, on its last day', () 
     day(TODAY - DAY, { tradedSettled: 4, markets: ['m1'] }),
     day(TODAY, { tradedSettled: 6, markets: ['m1'] }),
   ];
-  assert.equal(metricsFor(days, { tallies: { m1: [1, 1, 10] } }).settledCost, 10);
+  assert.equal(metricsFor(days, { tallies: { m1: [1, 1, 10, 1] } }).settledCost, 10);
 });
 
 test('without a market buy cost, the day falls back to its non-negative settled cost', () => {
   const days = [
-    day(TODAY, { tradedSettled: 8, feesSettled: 2, markets: ['m1', 'm2'] }),
+    day(TODAY, { tradedSettled: 10, markets: ['m1', 'm2'] }),
     day(TODAY - DAY, { tradedSettled: -5, markets: ['m3'] }),
     day(TODAY - 2 * DAY, { tradedSettled: 3 }),
   ];
-  // m1 known (4), m2 unknown: max(4, 8 + 2); m3 unknown and net negative: 0; no markets: 3
-  assert.equal(metricsFor(days, { tallies: { m1: [1, 1, 4] } }).settledCost, 13);
+  // m1 known (4), m2 unknown: max(4, 10); m3 unknown and net negative: 0; no markets: 3
+  assert.equal(metricsFor(days, { tallies: { m1: [1, 1, 4, 1] } }).settledCost, 13);
 });
 
 test('a fallback day leaves out the buy cost of a market counted on a later settlement', () => {
@@ -171,10 +168,10 @@ test('a fallback day leaves out the buy cost of a market counted on a later sett
     day(TODAY, { tradedSettled: 10, markets: ['m1'] }),
   ];
   // Day 1: max(0, 12 - 10) for m2; day 3: m1's buy cost once
-  assert.equal(metricsFor(days, { tallies: { m1: [1, 1, 10] } }).settledCost, 2 + 10);
+  assert.equal(metricsFor(days, { tallies: { m1: [1, 1, 10, 1] } }).settledCost, 2 + 10);
   // Never below zero when the later market's buy cost exceeds the day's net
   const small = [day(TODAY - DAY, { tradedSettled: 4, markets: ['m1', 'm2'] }), days[1]];
-  assert.equal(metricsFor(small, { tallies: { m1: [1, 1, 10] } }).settledCost, 10);
+  assert.equal(metricsFor(small, { tallies: { m1: [1, 1, 10, 1] } }).settledCost, 10);
 });
 
 const RANK_RULE = { minSettledBets: MIN_SETTLED_BETS_PER_WINDOW };
@@ -204,15 +201,25 @@ test('window bounds include the cutoff day and exclude the day before, for 7D an
   }
 });
 
-test('volume, trades and average trade size come from the window days', () => {
-  const metrics = metricsFor([
-    day(TODAY, { bets: 3, traded: 6 }),
-    day(TODAY - DAY, { bets: 1, traded: 2 }),
-  ]);
+test('trades, volume and average trade size are the buys on the markets settled in the window', () => {
+  const days = [
+    day(TODAY, { tradedSettled: 1, markets: ['m1', 'm2'] }),
+    day(TODAY - DAY, { markets: ['m3'] }),
+    // Settled before the window: left out
+    day(TODAY - 10 * DAY, { markets: ['m4'] }),
+    // Untallied: in the ROI fallback only
+    day(TODAY - 2 * DAY, { tradedSettled: 5, markets: ['m5'] }),
+  ];
+  const metrics = metricsFor(days, {
+    // [won, counted (sells included), buy cost, buys]
+    tallies: { m1: [1, 3, 6, 2], m2: [0, 1, 1, 1], m3: [1, 1, 1, 1], m4: [1, 1, 50, 9] },
+  });
   assert.equal(metrics.trades, 4);
   assert.equal(metrics.volume, 8);
   assert.equal(metrics.avgTradeSize, 2);
+  assert.equal(metrics.settledCost, 8 + 5);
   assert.equal(metricsFor([]).avgTradeSize, null);
+  assert.equal(metricsFor([]).volume, 0);
 });
 
 test('Brier score is the window sum over the settled bet count, or null without bets', () => {
@@ -227,7 +234,7 @@ test('Brier score is the window sum over the settled bet count, or null without 
 test('accuracy sums the tallies of markets settled in the window', () => {
   const metrics = metricsFor(
     [day(TODAY, { markets: ['m1', 'm2'] }), day(TODAY - 30 * DAY, { markets: ['m3'] })],
-    { tallies: { m1: [1, 2, 1], m2: [2, 2, 1], m3: [0, 5, 1] } },
+    { tallies: { m1: [1, 2, 1, 1], m2: [2, 2, 1, 1], m3: [0, 5, 1, 1] } },
   );
   assert.equal(metrics.accuracy, 0.75);
   assert.equal(metricsFor([day(TODAY, { markets: ['m9'] })]).accuracy, null);
@@ -238,7 +245,7 @@ test('a market settled on two days counts towards accuracy once, on its last day
     day(TODAY - 2 * DAY, { markets: ['m1'] }),
     day(TODAY - DAY, { markets: ['m1', 'm2'] }),
   ];
-  const tallies = { m1: [1, 1, 1], m2: [0, 1, 1] };
+  const tallies = { m1: [1, 1, 1, 1], m2: [0, 1, 1, 1] };
   assert.equal(metricsFor(days, { tallies }).accuracy, 0.5);
 });
 
@@ -268,10 +275,13 @@ test('Polymarket tallies skip unresolved and invalid (winningIndex < 0) question
 test('a final market without returned bets is left untallied, so it is retried', () => {
   const score = (outcomeIndexes) => tallyPolymarketBets({ outcomeIndexes, winningIndex: 1 });
   assert.equal(toMarketTally(undefined, score), null);
-  assert.deepEqual(toMarketTally({ outcomeIndexes: [1, 0], buyCost: 3 }, score), [1, 2, 3]);
+  assert.deepEqual(
+    toMarketTally({ outcomeIndexes: [1, 0], buyCost: 3, buys: 1 }, score),
+    [1, 2, 3, 1],
+  );
   // Not final: nothing to store either
   assert.equal(
-    toMarketTally({ outcomeIndexes: [1], buyCost: 3 }, () => null),
+    toMarketTally({ outcomeIndexes: [1], buyCost: 3, buys: 1 }, () => null),
     null,
   );
 });
@@ -605,11 +615,9 @@ test('computeSnapshot ranks each window and nulls metrics of agents not ranked t
       tradedSettled: 10,
       brierCount: 5,
       brierSum: 1,
-      bets: 5,
-      traded: 10,
       markets: ['m1'],
     });
-  const tallies = { m1: [1, 1, 10] };
+  const tallies = { m1: [1, 1, 10, 1] };
   const agents = [
     { address: '0xa', serviceId: '592', days: [settledToday(1)], requests: [], tallies },
     { address: '0xb', serviceId: '1549', days: [settledToday(3)], requests: [], tallies },
@@ -617,7 +625,7 @@ test('computeSnapshot ranks each window and nulls metrics of agents not ranked t
     {
       address: '0xc',
       serviceId: '2265',
-      days: [day(TODAY - 40 * DAY, { profit: 9, tradedSettled: 10, brierCount: 5, bets: 5 })],
+      days: [day(TODAY - 40 * DAY, { profit: 9, tradedSettled: 10, brierCount: 5 })],
       requests: [],
       tallies: {},
     },
@@ -625,7 +633,7 @@ test('computeSnapshot ranks each window and nulls metrics of agents not ranked t
     {
       address: '0xd',
       serviceId: '1',
-      days: [day(TODAY, { bets: 2, traded: 2 })],
+      days: [day(TODAY)],
       requests: [],
       tallies: {},
     },
@@ -867,7 +875,7 @@ test('a builder state read back must have the expected shape', () => {
         ],
       },
     },
-    tallies: { '0x1': { m1: [1, 2, 3.5] } },
+    tallies: { '0x1': { m1: [1, 2, 3.5, 1] } },
     titles: { q1: 'abc' },
     pendingMarkets: { m2: [1, 2] },
   };
