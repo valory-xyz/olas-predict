@@ -77,7 +77,9 @@ const handler = async (
       response.failed.push(agentType);
     }
   });
-  return res.status(200).json(response);
+  // A failed type answers 500, so Vercel Cron records the run as failed; the body still says
+  // which types updated
+  return res.status(response.failed.length ? 500 : 200).json(response);
 };
 
 export default handler;
