@@ -11,7 +11,7 @@ Olas Predict is a Next.js-based prediction market application built for the Olas
 - React 18 with Ant Design (AntD) UI components
 - Styled Components for styling
 - TanStack Query (React Query) for data fetching
-- Viem for read-only Gnosis Chain access (`publicClient.readContract` / `getLogs` only — no wallet connectors, no signing). Wagmi was removed; see `constants/viemConfig.ts` and `SUPPLY-CHAIN-SECURITY.md` §5a.
+- Viem for read-only chain access (`readContract` / `getLogs` / `multicall` only — no wallet connectors, no signing): Gnosis Chain in the app, plus Polygon server-side for the leaderboard builder. Wagmi was removed; see `constants/viemConfig.ts` and `SUPPLY-CHAIN-SECURITY.md` §5a.
 - GraphQL (graphql-request) for subgraph queries
 - Vercel Blob for achievement OG-image lookups (SSR only) and the leaderboard snapshots (API routes only)
 
@@ -141,8 +141,8 @@ All GraphQL types are auto-generated in `graphql/types.ts` (ignored by ESLint).
 - React Query DevTools available in development (bottom-left)
 
 **Viem** for read-only blockchain access:
-- Configuration in `constants/viemConfig.ts` exports a single `publicClient` (Gnosis Chain transport).
-- The only PROD code path that actually reads on-chain is `components/MechAgents.tsx` (calls `publicClient.readContract` + `publicClient.getLogs` for mech agent hashes). Every other "data" hook in `hooks/` uses subgraphs via `graphql-request`.
+- Configuration in `constants/viemConfig.ts` exports a single `publicClient` (Gnosis Chain transport). The leaderboard builder (`utils/leaderboard/sources.ts`, server-side only) reuses it and adds its own Polygon `createPublicClient` (`POLYGON_RPC_URL`, publicnode by default) for `multicall` reads of `ServiceRegistry.tokenURI`.
+- In the browser, the only code path that reads on-chain is `components/MechAgents.tsx` (calls `publicClient.readContract` + `publicClient.getLogs` for mech agent hashes); server-side, `utils/leaderboard/sources.ts` does (see above). Every other "data" hook in `hooks/` uses subgraphs via `graphql-request`.
 - **Wagmi was dropped** in favor of bare viem because the app has no wallet flow (no `useConnect`, no `useAccount`, no `writeContract`, no signing). Carrying the wagmi connector tree (`@wagmi/connectors`, `@walletconnect/*`, `@metamask/sdk`, `@coinbase/wallet-sdk`) added ~18 kB to the shared bundle, three native install hooks (`bufferutil`, `keccak`, `utf-8-validate`), and a long tail of Dependabot transitive-CVE alerts for code paths this app never invoked. See `SUPPLY-CHAIN-SECURITY.md` §5a for the migration rationale.
 - The contract ABIs in `constants/contracts/` are used by `MechAgents.tsx`; `serviceRegistry` is currently defined but unused.
 
@@ -273,5 +273,5 @@ This repo has a hardened dependency workflow — read `SUPPLY-CHAIN-SECURITY.md`
 - **Mobile layout**: Always test responsive behavior — actual breakpoints are `sm: 576px` and `xl: 1240px` (see `constants/theme.ts` / `MEDIA_QUERY`)
 - **IPFS content**: May be slow to load; implement loading states
 - **Gnosis Chain only**: Don't attempt multi-chain support without configuration changes
-- **Read-only on-chain access via viem**: `MechAgents.tsx` is the only PROD file calling viem (`publicClient.readContract` + `publicClient.getLogs`). Wagmi was removed; do NOT add wagmi back when you need a new on-chain read — use the existing `publicClient` from `constants/viemConfig.ts`. Adding wagmi reintroduces the wallet-stack supply-chain surface and ~18 kB of bundle.
+- **Read-only on-chain access via viem**: two PROD files call viem — `MechAgents.tsx` in the browser (`publicClient.readContract` + `publicClient.getLogs`) and, server-side only, `utils/leaderboard/sources.ts` (`multicall` over the Gnosis `publicClient` and its own Polygon `createPublicClient`). Wagmi was removed; do NOT add wagmi back when you need a new on-chain read — use the existing `publicClient` from `constants/viemConfig.ts` (or a server-side client like the leaderboard's for another chain). Adding wagmi reintroduces the wallet-stack supply-chain surface and ~18 kB of bundle.
 - **Achievement pages bypass `Layout`**: They're SSR with their own full-screen card and depend on `BLOB_READ_WRITE_TOKEN` at runtime.
