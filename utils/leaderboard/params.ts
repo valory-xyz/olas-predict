@@ -44,6 +44,21 @@ export const parseInteger = (value: QueryValue, fallback: number): number | null
   return Number(value);
 };
 
+/** Clock difference tolerated between the instance that built a snapshot and the one reading */
+const SNAPSHOT_CLOCK_SKEW_MS = 60_000;
+
+/**
+ * The `snapshot` a later page asks for: a snapshot's `updatedAt`, i.e. a canonical ISO timestamp
+ * (`Date#toISOString`) that is not in the future. `null` for anything else, so made-up values
+ * cannot be used to bypass the memo and the CDN.
+ */
+export const parseSnapshotParam = (value: QueryValue, now: number): string | null => {
+  if (typeof value !== 'string') return null;
+  const time = Date.parse(value);
+  if (Number.isNaN(time) || time > now + SNAPSHOT_CLOCK_SKEW_MS) return null;
+  return new Date(time).toISOString() === value ? value : null;
+};
+
 /** The first of `names` given more than once in the query, if any */
 export const findRepeatedParam = (
   query: Partial<Record<string, QueryValue>>,

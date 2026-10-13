@@ -21,6 +21,7 @@ import {
   parseAgentType,
   parseInteger,
   parseRankBy,
+  parseSnapshotParam,
   parseWindow,
 } from '../utils/leaderboard/params.ts';
 import {
@@ -789,4 +790,24 @@ test('a market left untallied is looked up again with a doubling wait, up to a d
   for (let i = 0; i < 10; i++) check = recordMarketMiss(check, 0);
   assert.equal(needsMarketCheck(check, PENDING_MARKET_MAX_RECHECK_MS - HOUR), false);
   assert.equal(needsMarketCheck(check, PENDING_MARKET_MAX_RECHECK_MS), true);
+});
+
+test('the snapshot parameter must be a past canonical ISO timestamp', () => {
+  const now = Date.parse('2026-10-13T12:00:00.000Z');
+  const valid = '2026-10-13T11:00:00.000Z';
+  assert.equal(parseSnapshotParam(valid, now), valid);
+  // Small clock differences between instances are tolerated
+  assert.equal(parseSnapshotParam('2026-10-13T12:00:30.000Z', now), '2026-10-13T12:00:30.000Z');
+  for (const bad of [
+    '',
+    'z123',
+    '2026-10-13T13:00:00.000Z',
+    '2026-10-13T11:00:00Z',
+    '2026-10-13',
+    '1791504000',
+    'Tue Oct 13 2026',
+    ['2026-10-13T11:00:00.000Z'],
+  ]) {
+    assert.equal(parseSnapshotParam(bad, now), null, String(bad));
+  }
 });

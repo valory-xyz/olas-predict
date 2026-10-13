@@ -17,6 +17,8 @@ import { isValidSnapshot } from './validate';
 const SNAPSHOT_MEMO_TTL_MS = 60_000;
 /** After a failed read, how soon the last good snapshot is checked against Blob again */
 const SNAPSHOT_RETRY_MS = 10_000;
+/** How soon a client's newer `snapshot` may trigger another Blob check of the memo */
+const SNAPSHOT_MIN_RECHECK_MS = 5_000;
 /** Shortest edge cache Blob allows, so a rewritten snapshot is visible within a minute */
 const BLOB_CACHE_MAX_AGE_SECONDS = 60;
 
@@ -114,7 +116,8 @@ export type SnapshotRead = {
 /**
  * The current snapshot for an agent type. Memoized per warm function and only re-downloaded
  * when Blob has a newer one; `minUpdatedAt` skips the memo when it is older than that (a client
- * already saw a newer snapshot on another instance).
+ * already saw a newer snapshot on another instance), at most once per `SNAPSHOT_MIN_RECHECK_MS`.
+ * An older or equal `minUpdatedAt` is answered from the memo, without a Blob request.
  *
  * A snapshot that fails validation (wrong shape, schema version or agent type) counts as a
  * failed read. When a read fails, the last good snapshot this function holds is served, marked
@@ -125,8 +128,13 @@ export const readSnapshot = async (
   { minUpdatedAt }: { minUpdatedAt?: string } = {},
 ): Promise<SnapshotRead> => {
   const memo = snapshotMemo.get(agentType);
-  const isMemoOlder = !!minUpdatedAt && !!memo?.snapshot && memo.snapshot.updatedAt < minUpdatedAt;
-  if (memo && !isMemoOlder && Date.now() - memo.checkedAt < SNAPSHOT_MEMO_TTL_MS) {
+  const sinceCheck = memo ? Date.now() - memo.checkedAt : Infinity;
+  const isMemoOlder =
+    !!minUpdatedAt &&
+    !!memo?.snapshot &&
+    memo.snapshot.updatedAt < minUpdatedAt &&
+    sinceCheck >= SNAPSHOT_MIN_RECHECK_MS;
+  if (memo && !isMemoOlder && sinceCheck < SNAPSHOT_MEMO_TTL_MS) {
     return { snapshot: memo.snapshot, isStale: memo.isStale };
   }
 

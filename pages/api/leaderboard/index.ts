@@ -12,6 +12,7 @@ import {
   parseAgentType,
   parseInteger,
   parseRankBy,
+  parseSnapshotParam,
   parseWindow,
 } from 'utils/leaderboard/params';
 import { normalizeSearch } from 'utils/leaderboard/ranking';
@@ -55,8 +56,10 @@ const handler = async (
     return sendBadRequest(res, `Invalid limit: must be from 1 to ${LEADERBOARD_MAX_LIMIT}`);
   }
   const search = normalizeSearch(req.query.search as string | undefined);
-  const expectedSnapshot = req.query.snapshot as string | undefined;
-  if (expectedSnapshot === '') return sendBadRequest(res, 'Invalid snapshot');
+  const snapshotParam = req.query.snapshot;
+  const expectedSnapshot =
+    snapshotParam === undefined ? undefined : parseSnapshotParam(snapshotParam, Date.now());
+  if (expectedSnapshot === null) return sendBadRequest(res, 'Invalid snapshot');
 
   let read;
   try {
