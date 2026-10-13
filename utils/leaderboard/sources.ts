@@ -3,24 +3,12 @@
  * builder (`builder.ts`) decides what to fetch and what to keep.
  */
 import { type Variables, request } from 'graphql-request';
-import {
-  leaderboardMechRequestsAtQuery,
-  leaderboardMechRequestsQuery,
-  leaderboardOmenBetsQuery,
-  leaderboardOmenDailyStatisticsQuery,
-  leaderboardOmenFinalizationQuery,
-  leaderboardOmenTraderAgentsQuery,
-  leaderboardPolymarketBetsQuery,
-  leaderboardPolymarketDailyStatisticsQuery,
-  leaderboardPolymarketQuestionsQuery,
-  leaderboardPolymarketTraderAgentsQuery,
-} from 'graphql/queries';
 import { createPublicClient, formatUnits, http, parseAbi } from 'viem';
 import { polygon } from 'viem/chains';
 
 import {
   AGENTS,
-  AgentType,
+  type AgentType,
   OLAS_MECH_POLYGON_SUBGRAPH_URL,
   OLAS_MECH_SUBGRAPH_URL,
   OMEN_SUBGRAPH_URL,
@@ -38,6 +26,18 @@ import { publicClient } from 'constants/viemConfig';
 import type { AgentDay } from './metrics';
 import { SECONDS_PER_DAY } from './metrics';
 import { pageById, pageByTimestamp } from './paging';
+import {
+  leaderboardMechRequestsAtQuery,
+  leaderboardMechRequestsQuery,
+  leaderboardOmenBetsQuery,
+  leaderboardOmenDailyStatisticsQuery,
+  leaderboardOmenFinalizationQuery,
+  leaderboardOmenTraderAgentsQuery,
+  leaderboardPolymarketBetsQuery,
+  leaderboardPolymarketDailyStatisticsQuery,
+  leaderboardPolymarketQuestionsQuery,
+  leaderboardPolymarketTraderAgentsQuery,
+} from './queries';
 
 const PAGE_SIZE = 1000;
 /** `id_in` / `_in` filters are chunked to stay well inside the indexers' limits */

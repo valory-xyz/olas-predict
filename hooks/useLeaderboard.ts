@@ -1,7 +1,7 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 
-import { AgentType } from 'constants/index';
+import type { AgentType } from 'constants/index';
 import { LEADERBOARD_PAGE_SIZE, LeaderboardWindow, RankBy } from 'constants/leaderboard';
 import type { LeaderboardErrorResponse, LeaderboardListResponse } from 'types/leaderboard';
 import { shouldRestartFromSnapshot } from 'utils/leaderboard/params';

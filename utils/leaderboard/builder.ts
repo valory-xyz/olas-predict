@@ -2,13 +2,13 @@
  * Server-only leaderboard builder: brings one agent type's working state up to date and, once
  * every input is complete, computes the ranked snapshot. Called by the cron refresh route.
  */
-import { AGENTS, AgentType, INVALID_ANSWER_HEX } from 'constants/index';
+import { AGENTS, type AgentType, INVALID_ANSWER_HEX } from 'constants/index';
 import { LEADERBOARD_WINDOW_DAYS } from 'constants/leaderboard';
 import type { LeaderboardSnapshot } from 'types/leaderboard';
 
 import { computeSnapshot } from './compute';
 import {
-  MarketTitles,
+  type MarketTitles,
   SECONDS_PER_DAY,
   getWindowStart,
   tallyOmenBets,

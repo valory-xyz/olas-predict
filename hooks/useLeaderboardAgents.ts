@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { isAddress } from 'viem';
 
-import { AgentType } from 'constants/index';
+import type { AgentType } from 'constants/index';
 import { LEADERBOARD_MAX_ADDRESSES, LeaderboardWindow } from 'constants/leaderboard';
 import type { LeaderboardAgentRecord, LeaderboardAgentsResponse } from 'types/leaderboard';
 

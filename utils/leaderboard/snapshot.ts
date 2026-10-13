@@ -5,7 +5,7 @@
  */
 import { BlobNotFoundError, head, put } from '@vercel/blob';
 
-import { AgentType } from 'constants/index';
+import type { AgentType } from 'constants/index';
 import { LEADERBOARD_BLOB_PREFIX, LEADERBOARD_STATE_SCHEMA_VERSION } from 'constants/leaderboard';
 import type { LeaderboardSnapshot } from 'types/leaderboard';
 

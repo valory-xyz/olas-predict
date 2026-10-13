@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
-import { AgentType } from 'constants/index';
+import type { AgentType } from 'constants/index';
 import { LEADERBOARD_AGENT_TYPES } from 'constants/leaderboard';
 import { buildLeaderboard } from 'utils/leaderboard/builder';
 import { isCronAuthorized } from 'utils/leaderboard/respond';
