@@ -14,7 +14,7 @@ import {
   leaderboardPolymarketQuestionsQuery,
   leaderboardPolymarketTraderAgentsQuery,
 } from 'graphql/queries';
-import { createPublicClient, http, parseAbi } from 'viem';
+import { createPublicClient, formatUnits, http, parseAbi } from 'viem';
 import { polygon } from 'viem/chains';
 
 import {
@@ -79,15 +79,9 @@ export const mapWithConcurrency = async <T, R>(
   return results;
 };
 
-/** Divides a token amount given as a decimal string by 10^decimals, keeping precision */
-const toUnits = (amount: string | number | null | undefined, decimals: number) => {
-  if (amount === null || amount === undefined) return 0;
-  const value = BigInt(amount);
-  const divisor = BigInt(`1${'0'.repeat(decimals)}`);
-  const whole = value / divisor;
-  const fraction = value % divisor;
-  return Number(whole) + Number(fraction) / Number(divisor);
-};
+/** A token amount given as an integer string, in whole tokens */
+const toUnits = (amount: string | number | null | undefined, decimals: number) =>
+  amount === null || amount === undefined ? 0 : Number(formatUnits(BigInt(amount), decimals));
 
 /** Short, stable key for a question title, so the working state stores no full titles */
 export const toTitleKey = (title: string) => {
