@@ -1,3 +1,4 @@
+/* global globalThis */
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
@@ -18,7 +19,7 @@ import {
   tallyPolymarketBets,
   toMarketTally,
 } from '../utils/leaderboard/metrics.ts';
-import { pageById, pageByTimestamp } from '../utils/leaderboard/paging.ts';
+import { pageById } from '../utils/leaderboard/paging.ts';
 import {
   findRepeatedParam,
   getLeaderboardUrl,
@@ -50,6 +51,7 @@ import { parseStoredPins } from '../utils/leaderboard/pins.ts';
 import { assignRanks, getNotRankedReason, searchByName } from '../utils/leaderboard/ranking.ts';
 import { isCronAuthorized } from '../utils/leaderboard/respond.ts';
 import { HttpStatusError, isTransientError, withRetry } from '../utils/leaderboard/retry.ts';
+import { fetchMechRequests } from '../utils/leaderboard/sources.ts';
 import { isValidBuilderState, isValidSnapshot } from '../utils/leaderboard/validate.ts';
 import { getAgentRecords, getLeaderboardPage } from '../utils/leaderboard/views.ts';
 
@@ -678,102 +680,8 @@ test('the refresh route accepts only the exact cron bearer secret', () => {
   assert.equal(isCronAuthorized('Bearer ', ''), false);
 });
 
-// A fake indexer: rows sorted by timestamp only, ties in no particular order (reverse id here)
-const fakeTimestampSource = (rows, pageSize) => {
-  const byTimestamp = [...rows].sort((a, b) => a.timestamp - b.timestamp || (a.id < b.id ? 1 : -1));
-  const byId = [...rows].sort((a, b) => (a.id < b.id ? -1 : 1));
-  const calls = { after: 0, at: 0 };
-  return {
-    calls,
-    fetchAfter: async (timestampGt) => {
-      calls.after++;
-      return byTimestamp.filter((row) => row.timestamp > timestampGt).slice(0, pageSize);
-    },
-    fetchAt: async (timestamp, idGt) => {
-      calls.at++;
-      return byId.filter((row) => row.timestamp === timestamp && row.id > idGt).slice(0, pageSize);
-    },
-  };
-};
-
-const timestampRows = (count, perTimestamp) =>
-  Array.from({ length: count }, (_, i) => ({
-    id: `r${String(i).padStart(6, '0')}`,
-    timestamp: 1000 + Math.floor(i / perTimestamp),
-  }));
-
-test('timestamp paging returns every row once across page boundaries and shared timestamps', async () => {
-  for (const [count, perTimestamp, pageSize] of [
-    [6500, 3, 1000],
-    [25, 4, 5],
-    [12, 12, 5],
-    [10, 1, 5],
-    [0, 1, 5],
-  ]) {
-    const rows = timestampRows(count, perTimestamp);
-    const source = fakeTimestampSource(rows, pageSize);
-    const result = await pageByTimestamp({
-      timestampGt: 0,
-      pageSize,
-      isPastDeadline: () => false,
-      ...source,
-    });
-    const label = `${count}/${perTimestamp}/${pageSize}`;
-    assert.equal(result.complete, true, label);
-    assert.deepEqual(
-      result.rows.map((row) => row.id).sort(),
-      rows.map((row) => row.id),
-      label,
-    );
-    assert.equal(result.syncedTo, count ? rows[count - 1].timestamp : 0, label);
-  }
-});
-
-test('timestamp paging resumes from syncedTo without gaps or repeats', async () => {
-  const rows = timestampRows(40, 3);
-  const source = fakeTimestampSource(rows, 5);
-  let pages = 0;
-  const first = await pageByTimestamp({
-    timestampGt: 0,
-    pageSize: 5,
-    // Out of time after two pages
-    isPastDeadline: () => pages++ >= 2,
-    ...source,
-  });
-  assert.equal(first.complete, false);
-  assert.ok(first.rows.length > 0 && first.rows.length < rows.length);
-  // Everything up to syncedTo is there, nothing after it
-  assert.deepEqual(
-    first.rows.map((row) => row.id).sort(),
-    rows.filter((row) => row.timestamp <= first.syncedTo).map((row) => row.id),
-  );
-  const rest = await pageByTimestamp({
-    timestampGt: first.syncedTo,
-    pageSize: 5,
-    isPastDeadline: () => false,
-    ...source,
-  });
-  assert.equal(rest.complete, true);
-  assert.deepEqual(
-    [...first.rows, ...rest.rows].map((row) => row.id).sort(),
-    rows.map((row) => row.id),
-  );
-});
-
-test('timestamp paging stops before the first page once the deadline passed', async () => {
-  const source = fakeTimestampSource(timestampRows(10, 1), 5);
-  const result = await pageByTimestamp({
-    timestampGt: 7,
-    pageSize: 5,
-    isPastDeadline: () => true,
-    ...source,
-  });
-  assert.deepEqual(result, { rows: [], syncedTo: 7, complete: false });
-  assert.equal(source.calls.after, 0);
-});
-
 test('id paging follows the id cursor and reports a deadline stop as incomplete', async () => {
-  const rows = timestampRows(23, 1);
+  const rows = Array.from({ length: 23 }, (_, i) => ({ id: `r${String(i).padStart(6, '0')}` }));
   const fetchPage = async (idGt) => rows.filter((row) => row.id > idGt).slice(0, 5);
   const all = await pageById({
     pageSize: 5,
@@ -935,4 +843,80 @@ test('withRetry retries transient errors before the deadline only', async () => 
   assert.equal(isTransientError(timeout), true);
   assert.equal(isTransientError(new HttpStatusError(429, 'u')), true);
   assert.equal(isTransientError(new HttpStatusError(404, 'u')), false);
+});
+
+/** Replaces `fetch` for one test with `handler(url)` -> { status, body } */
+const withFetch = async (handler, run) => {
+  const original = globalThis.fetch;
+  const urls = [];
+  globalThis.fetch = async (input) => {
+    const url = new URL(String(input));
+    urls.push(url);
+    const { status = 200, body } = await handler(url);
+    return new Response(JSON.stringify(body), { status });
+  };
+  try {
+    return await run(urls);
+  } finally {
+    globalThis.fetch = original;
+  }
+};
+
+const scoredRow = (id, requestedAt, title = `Q${id}`) => ({
+  request_id: `0x${id}`,
+  requested_at: requestedAt,
+  question_title: title,
+  source: 'mech_offchain',
+});
+
+test('mech requests come from mech-analytics scored rows, paged by cursor and chain-scoped', async () => {
+  const pages = {
+    '': {
+      rows: [scoredRow(1, '2026-10-01T10:00:00.5Z'), scoredRow(2, '2026-10-01T11:00:00Z', null)],
+      next_cursor: 'c1',
+    },
+    c1: {
+      rows: [scoredRow(2, '2026-10-01T11:00:00Z', null), scoredRow(3, '2026-10-02T00:00:00Z')],
+      next_cursor: null,
+    },
+  };
+  await withFetch(
+    (url) => ({ body: pages[url.searchParams.get('cursor') ?? ''] }),
+    async (urls) => {
+      const result = await fetchMechRequests('polystrat', '0xabc', 1791000000, Date.now() + 60_000);
+      assert.equal(result.complete, true);
+      // De-duplicated by request id, untitled kept as null
+      assert.deepEqual(result.requests, [
+        { title: 'Q1', timestamp: Date.parse('2026-10-01T10:00:00Z') / 1000 },
+        { title: null, timestamp: Date.parse('2026-10-01T11:00:00Z') / 1000 },
+        { title: 'Q3', timestamp: Date.parse('2026-10-02T00:00:00Z') / 1000 },
+      ]);
+      const first = urls[0].searchParams;
+      assert.equal(urls[0].pathname, '/v1/data/scored-rows');
+      assert.equal(first.get('requester'), '0xabc');
+      assert.equal(first.get('chain_id'), '137');
+      assert.equal(first.get('since'), new Date(1791000000 * 1000).toISOString());
+      assert.equal(first.get('sort'), 'requested_at');
+      assert.equal(urls[1].searchParams.get('cursor'), 'c1');
+    },
+  );
+  // A failed answer throws instead of reading as "no requests"
+  await withFetch(
+    () => ({ status: 404, body: {} }),
+    () =>
+      assert.rejects(fetchMechRequests('omenstrat', '0xabc', 0, Date.now() + 60_000), /HTTP 404/),
+  );
+  await withFetch(
+    () => ({ body: { detail: 'proxy error' } }),
+    () => assert.rejects(fetchMechRequests('omenstrat', '0xabc', 0, Date.now() + 60_000)),
+  );
+  // Past the deadline: nothing fetched, incomplete
+  await withFetch(
+    () => assert.fail('no request expected'),
+    async () =>
+      assert.deepEqual(await fetchMechRequests('omenstrat', '0xabc', 0, Date.now() - 1), {
+        requests: [],
+        complete: false,
+      }),
+  );
 });

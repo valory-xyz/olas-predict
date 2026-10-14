@@ -107,5 +107,3 @@ export const TIME_IN_SECONDS = {
 // The agent's own Omen trader subgraph deployment, which carries per-day profit statistics
 export const PREDICT_OMEN_SUBGRAPH_URL =
   'https://api.subgraph.autonolas.tech/api/proxy/predict-omen';
-export const OLAS_MECH_POLYGON_SUBGRAPH_URL =
-  'https://api.subgraph.autonolas.tech/api/proxy/marketplace-polygon';

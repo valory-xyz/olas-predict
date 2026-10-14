@@ -27,7 +27,10 @@ export type BuilderState = {
   schemaVersion: number;
   /** Pearl flag lookup per service id */
   pearl: Record<string, PearlLookup>;
-  /** Per agent: mech requests as [title key, timestamp], and the newest timestamp fetched */
+  /**
+   * Per agent: mech requests from mech-analytics as [title key, timestamp (s)], and the newest
+   * request time fetched (each run re-reads from a day before it)
+   */
   mech: Record<string, { syncedTo: number; requests: [string, number][] }>;
   /** Per agent: the tally of each market with a final answer (see `MarketTally`) */
   tallies: Record<string, MarketTallies>;

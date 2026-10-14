@@ -60,6 +60,12 @@ export const LEADERBOARD_PATH = '/leaderboard';
 
 export const PINNED_AGENTS_STORAGE_KEY = 'olas-predict.leaderboard.pins.v1';
 
+/**
+ * mech-analytics, where Pearl's trader reads its mech requests (`MECH_ANALYTICS_URL` in its
+ * service template); the builder reads it server-side, `MECH_ANALYTICS_URL` overrides it
+ */
+export const MECH_ANALYTICS_DEFAULT_URL = 'https://mech-analytics-api.autonolas.tech';
+
 /** Fixed fee per mech request in USD, the same constant the trader agent uses */
 export const MECH_FEE_USD = 0.01;
 export const QUESTION_DATA_SEPARATOR = '␟';
@@ -91,5 +97,6 @@ export const PEARL_TRADER_SERVICE_PACKAGES: Record<AgentType, string> = {
 export const LEADERBOARD_BLOB_PREFIX = 'leaderboard';
 export const LEADERBOARD_SNAPSHOT_SCHEMA_VERSION = 1;
 // 2: Pearl flags re-evaluated with the trader package name
-// 3: tallies carry the buy count, Omen buy cost without the fee counted twice
+// 3: tallies carry the buy count, Omen buy cost without the fee counted twice, mech requests
+//    from mech-analytics (on-chain and off-chain) instead of the marketplace subgraphs
 export const LEADERBOARD_STATE_SCHEMA_VERSION = 3;

@@ -136,38 +136,3 @@ export const leaderboardPolymarketBetsQuery = gql`
     }
   }
 `;
-
-export const leaderboardMechRequestsQuery = gql`
-  query LeaderboardMechRequests($sender: String!, $timestampGt: BigInt!) {
-    requests(
-      first: 1000
-      orderBy: blockTimestamp
-      orderDirection: asc
-      where: { sender: $sender, blockTimestamp_gt: $timestampGt }
-    ) {
-      id
-      blockTimestamp
-      parsedRequest {
-        questionTitle
-      }
-    }
-  }
-`;
-
-/** The rest of one timestamp's requests, for a page that ended inside that timestamp */
-export const leaderboardMechRequestsAtQuery = gql`
-  query LeaderboardMechRequestsAt($sender: String!, $timestamp: BigInt!, $idGt: ID!) {
-    requests(
-      first: 1000
-      orderBy: id
-      orderDirection: asc
-      where: { sender: $sender, blockTimestamp: $timestamp, id_gt: $idGt }
-    ) {
-      id
-      blockTimestamp
-      parsedRequest {
-        questionTitle
-      }
-    }
-  }
-`;

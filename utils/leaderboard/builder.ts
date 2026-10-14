@@ -42,6 +42,8 @@ import {
 /** Mech requests are kept from this long before the longest window, for markets open then */
 const MECH_LOOKBACK_SECONDS = 30 * SECONDS_PER_DAY;
 const AGENT_CONCURRENCY = 8;
+/** How far back each run re-reads an agent's mech requests (see `updateMechRequests`) */
+export const MECH_REFETCH_OVERLAP_SECONDS = SECONDS_PER_DAY;
 
 export type BuildResult = {
   state: BuilderState;
@@ -78,8 +80,12 @@ const updatePearlFlags = async (
 };
 
 /**
- * Fetches each agent's new mech requests; `false` when time ran out. An agent cut short keeps
- * the requests fetched so far and resumes from them on the next run.
+ * Fetches each agent's new mech requests; `false` when time ran out or a fetch failed. Each run
+ * re-reads the requests from `MECH_REFETCH_OVERLAP_SECONDS` before the newest one stored and
+ * replaces the stored ones from there: mech-analytics ingests requests with a delay (and only
+ * once their payload is parsed), so the newest stored request is not a safe cursor on its own.
+ * An agent cut short by the deadline keeps the requests fetched so far and resumes from them; a
+ * failed fetch leaves the agent's stored requests as they were.
  */
 const updateMechRequests = async (
   agentType: AgentType,
@@ -90,15 +96,29 @@ const updateMechRequests = async (
 ) => {
   const done = await mapWithConcurrency(agents, AGENT_CONCURRENCY, async (address) => {
     if (isPastDeadline(deadline)) return false;
-    const entry = state.mech[address] ?? { syncedTo: keepFrom, requests: [] };
-    const fetched = await fetchMechRequests(agentType, address, entry.syncedTo, deadline);
-    const requests = entry.requests.filter(([, timestamp]) => timestamp >= keepFrom);
+    const entry = state.mech[address];
+    const refetchFrom = entry
+      ? Math.max(keepFrom, entry.syncedTo - MECH_REFETCH_OVERLAP_SECONDS)
+      : keepFrom;
+    let fetched;
+    try {
+      fetched = await fetchMechRequests(agentType, address, refetchFrom, deadline);
+    } catch (error) {
+      console.error(`Leaderboard: ${agentType} mech requests of ${address} unavailable`, error);
+      return false;
+    }
+    if (!fetched.complete && !fetched.requests.length) return false;
+    const requests = (entry?.requests ?? []).filter(
+      ([, timestamp]) => timestamp >= keepFrom && timestamp < refetchFrom,
+    );
+    let newest = fetched.complete ? (entry?.syncedTo ?? keepFrom) : refetchFrom;
     // A request without a question title cannot be matched to a market; an empty key charges
     // it to its own day
-    fetched.requests.forEach(({ title, timestamp }) =>
-      requests.push([title ? toTitleKey(title) : '', timestamp]),
-    );
-    state.mech[address] = { syncedTo: fetched.syncedTo, requests };
+    fetched.requests.forEach(({ title, timestamp }) => {
+      requests.push([title ? toTitleKey(title) : '', timestamp]);
+      newest = Math.max(newest, timestamp);
+    });
+    state.mech[address] = { syncedTo: newest, requests };
     return fetched.complete;
   });
   return done.every(Boolean);

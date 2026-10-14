@@ -9,14 +9,13 @@ import { polygon } from 'viem/chains';
 import {
   AGENTS,
   type AgentType,
-  OLAS_MECH_POLYGON_SUBGRAPH_URL,
-  OLAS_MECH_SUBGRAPH_URL,
   OMEN_SUBGRAPH_URL,
   POLYMARKET_SQUID_URL,
   PREDICT_OMEN_SUBGRAPH_URL,
 } from 'constants/index';
 import {
   CHAIN_ID_BY_AGENT_TYPE,
+  MECH_ANALYTICS_DEFAULT_URL,
   QUESTION_DATA_SEPARATOR,
   SERVICE_REGISTRY_ADDRESSES,
   TOKEN_DECIMALS,
@@ -25,10 +24,8 @@ import { publicClient } from 'constants/viemConfig';
 
 import type { AgentDay } from './metrics';
 import { SECONDS_PER_DAY } from './metrics';
-import { pageById, pageByTimestamp } from './paging';
+import { pageById } from './paging';
 import {
-  leaderboardMechRequestsAtQuery,
-  leaderboardMechRequestsQuery,
   leaderboardOmenBetsQuery,
   leaderboardOmenDailyStatisticsQuery,
   leaderboardOmenFinalizationQuery,
@@ -38,7 +35,7 @@ import {
   leaderboardPolymarketQuestionsQuery,
   leaderboardPolymarketTraderAgentsQuery,
 } from './queries';
-import { withRetry } from './retry';
+import { HttpStatusError, withRetry } from './retry';
 
 const PAGE_SIZE = 1000;
 /** `id_in` / `_in` filters are chunked to stay well inside the indexers' limits */
@@ -363,69 +360,101 @@ export const fetchServiceMetadata = async (
   return { metadata, failed };
 };
 
-/** `title` is `null` for a request whose question title could not be parsed */
+/** One mech request; `title` is `null` for a request without a question title */
 export type MechRequestRecord = { title: string | null; timestamp: number };
 
-type MechRequestRow = {
-  id: string;
-  blockTimestamp: string;
-  parsedRequest: { questionTitle: string | null } | null;
+/** Most rows mech-analytics returns per page */
+const MECH_ANALYTICS_PAGE_LIMIT = 5000;
+/** Guards against a cursor cycle; ~1M rows for one Safe */
+const MECH_ANALYTICS_MAX_PAGES = 200;
+const MECH_ANALYTICS_TIMEOUT_MS = 30_000;
+
+const getMechAnalyticsUrl = () => process.env.MECH_ANALYTICS_URL || MECH_ANALYTICS_DEFAULT_URL;
+
+type ScoredRowsPage = { rows: unknown[]; next_cursor?: unknown };
+
+const isScoredRowsPage = (body: unknown): body is ScoredRowsPage =>
+  !!body && typeof body === 'object' && Array.isArray((body as ScoredRowsPage).rows);
+
+/** A scored row as a request, or `null` when the row lacks an id or a valid `requested_at` */
+const toMechRequest = (row: unknown): (MechRequestRecord & { id: string }) | null => {
+  if (!row || typeof row !== 'object') return null;
+  const {
+    request_id: id,
+    requested_at: requestedAt,
+    question_title: title,
+  } = row as Record<string, unknown>;
+  const time = typeof requestedAt === 'string' ? Date.parse(requestedAt) : NaN;
+  if (typeof id !== 'string' || Number.isNaN(time)) return null;
+  return {
+    id,
+    title: typeof title === 'string' && title ? title : null,
+    timestamp: Math.floor(time / 1000),
+  };
 };
 
 /**
- * The agent's mech requests after `timestampGt`, oldest first, and the timestamp up to which
- * they are complete. Pages by timestamp cursor (see `pageByTimestamp`) and stops between pages
- * at `deadline` (epoch ms), with `complete: false`; resume from `syncedTo`.
+ * The agent's mech requests made at or after `since` (seconds), oldest first, from
+ * mech-analytics' `/v1/data/scored-rows`: the per-Safe list Pearl's trader reads (its templates
+ * set `USE_MECH_ANALYTICS`), which holds on-chain, off-chain and backfilled requests. The
+ * marketplace subgraphs see on-chain requests only, and most Pearl requests are off-chain now.
+ * Like the trader's, this list leaves out requests whose payload could not be parsed.
+ *
+ * Pages by the endpoint's cursor and stops between pages at `deadline` (epoch ms) with
+ * `complete: false`; `requests` then holds every request up to the newest one returned. A
+ * failed request (after retries) or an unexpected answer throws, so an outage never reads as
+ * "no requests".
  */
 export const fetchMechRequests = async (
   agentType: AgentType,
-  sender: string,
-  timestampGt: number,
+  requester: string,
+  since: number,
   deadline: number,
-): Promise<{ requests: MechRequestRecord[]; syncedTo: number; complete: boolean }> => {
-  const url =
-    agentType === AGENTS.OMENSTRAT ? OLAS_MECH_SUBGRAPH_URL : OLAS_MECH_POLYGON_SUBGRAPH_URL;
-  const toRows = ({ requests }: { requests: MechRequestRow[] }) =>
-    requests.map((row) => ({ ...row, timestamp: Number(row.blockTimestamp) }));
-  const { rows, syncedTo, complete } = await pageByTimestamp({
-    timestampGt,
-    pageSize: PAGE_SIZE,
-    isPastDeadline: () => Date.now() >= deadline,
-    fetchAfter: async (after) =>
-      toRows(
-        await gqlRequest<{ requests: MechRequestRow[] }>(
-          url,
-          leaderboardMechRequestsQuery,
-          {
-            sender,
-            timestampGt: String(after),
-          },
-          deadline,
-        ),
-      ),
-    fetchAt: async (timestamp, idGt) =>
-      toRows(
-        await gqlRequest<{ requests: MechRequestRow[] }>(
-          url,
-          leaderboardMechRequestsAtQuery,
-          {
-            sender,
-            timestamp: String(timestamp),
-            idGt,
-          },
-          deadline,
-        ),
-      ),
-  });
-  return {
-    // Every request is paid for, even one whose question could not be parsed
-    requests: rows.map(({ parsedRequest, timestamp }) => ({
-      title: parsedRequest?.questionTitle || null,
-      timestamp,
-    })),
-    syncedTo,
-    complete,
-  };
+): Promise<{ requests: MechRequestRecord[]; complete: boolean }> => {
+  const byId = new Map<string, MechRequestRecord>();
+  const result = (complete: boolean) => ({ requests: [...byId.values()], complete });
+  let cursor: string | null = null;
+  for (let page = 0; page < MECH_ANALYTICS_MAX_PAGES; page++) {
+    if (Date.now() >= deadline) return result(false);
+    const params = new URLSearchParams({
+      requester,
+      chain_id: String(CHAIN_ID_BY_AGENT_TYPE[agentType]),
+      since: new Date(since * 1000).toISOString(),
+      sort: 'requested_at',
+      sort_direction: 'asc',
+      limit: String(MECH_ANALYTICS_PAGE_LIMIT),
+    });
+    if (cursor) params.set('cursor', cursor);
+    const url = `${getMechAnalyticsUrl()}/v1/data/scored-rows?${params}`;
+    const body = await withRetry(
+      async () => {
+        const response = await fetch(url, {
+          signal: AbortSignal.timeout(MECH_ANALYTICS_TIMEOUT_MS),
+        });
+        if (!response.ok) throw new HttpStatusError(response.status, url);
+        return (await response.json()) as unknown;
+      },
+      { deadline },
+    );
+    if (!isScoredRowsPage(body)) throw new Error(`Unexpected mech-analytics answer for ${url}`);
+    let malformed = 0;
+    body.rows.forEach((row) => {
+      const request = toMechRequest(row);
+      if (!request) {
+        malformed += 1;
+        return;
+      }
+      const { id, ...record } = request;
+      byId.set(id, record);
+    });
+    // Like the trader, which dates such a row to the epoch, far outside every window
+    if (malformed) console.error(`Leaderboard: ${malformed} mech-analytics rows skipped (${url})`);
+    cursor = typeof body.next_cursor === 'string' && body.next_cursor ? body.next_cursor : null;
+    if (!cursor) return result(true);
+  }
+  throw new Error(
+    `mech-analytics paging for ${requester} exceeded ${MECH_ANALYTICS_MAX_PAGES} pages`,
+  );
 };
 
 export type OmenMarketAnswer = {
