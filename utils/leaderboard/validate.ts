@@ -116,4 +116,5 @@ export const isValidBuilderState = (data: unknown): data is BuilderState =>
   isRecordOf(data.titles, (title) => typeof title === 'string') &&
   (data.pendingMarkets === undefined ||
     isRecordOf(data.pendingMarkets, (check) => isNumberTuple(check, 2))) &&
-  (data.population === undefined || isPopulationRecord(data.population));
+  (data.population === undefined || isPopulationRecord(data.population)) &&
+  (data.createdAt === undefined || typeof data.createdAt === 'number');
