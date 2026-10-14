@@ -11,12 +11,16 @@ const isAgentsResponse = (body: unknown): body is LeaderboardAgentsResponse => {
   const value = body as Partial<LeaderboardAgentsResponse> | null;
   return (
     !!value &&
+    typeof value.updatedAt === 'string' &&
     Array.isArray(value.agents) &&
     value.agents.every((agent) => !!agent && typeof agent.address === 'string')
   );
 };
 
-/** Ranks and metrics of specific Safes (the pinned agents), in request order */
+/**
+ * Ranks and metrics of specific Safes (the pinned agents), in request order, and the snapshot
+ * they come from (`updatedAt`; the oldest one when the Safes took several requests)
+ */
 export const useLeaderboardAgents = ({
   agentType,
   window,
@@ -38,7 +42,7 @@ export const useLeaderboardAgents = ({
         ? previous
         : undefined,
     retry: shouldRetryLeaderboard,
-    queryFn: async (): Promise<LeaderboardAgentRecord[]> => {
+    queryFn: async (): Promise<{ updatedAt: string; agents: LeaderboardAgentRecord[] }> => {
       const batches: string[][] = [];
       for (let i = 0; i < valid.length; i += LEADERBOARD_MAX_ADDRESSES) {
         batches.push(valid.slice(i, i + LEADERBOARD_MAX_ADDRESSES));
@@ -49,7 +53,10 @@ export const useLeaderboardAgents = ({
           return fetchLeaderboardJson(`/api/leaderboard/agents?${params}`, isAgentsResponse);
         }),
       );
-      return responses.flatMap((response) => response.agents);
+      return {
+        updatedAt: responses.map((response) => response.updatedAt).sort()[0],
+        agents: responses.flatMap((response) => response.agents),
+      };
     },
   });
 };

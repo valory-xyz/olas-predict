@@ -126,7 +126,7 @@ export const Leaderboard = ({
     return () => clearTimeout(timeout);
   }, [arrivalToast]);
 
-  const arrivalRecord = pinned.data?.find((record) => record.address === flashAddress);
+  const arrivalRecord = pinned.data?.agents.find((record) => record.address === flashAddress);
   useEffect(() => {
     if (!flashAddress || !arrivalRecord) return;
     setArrivalToast(
@@ -142,23 +142,29 @@ export const Leaderboard = ({
 
   const rows = useMemo(() => list.data?.pages.flatMap((page) => page.agents) ?? [], [list.data]);
 
+  const listSnapshot = list.data?.pages[0]?.updatedAt;
   // Pinned rows: ranked ones by rank under the current settings, then the not-ranked ones.
   // Built from the current pins, so an unpinned agent goes at once; an agent pinned from the list
-  // shows its list row until the pinned-agents answer (with every pin) arrives.
+  // shows its list row until the pinned-agents answer (with every pin) arrives. The two answers
+  // are cached for different times, so after a refresh they can come from different snapshots:
+  // then an agent with a list row shows that row, so its pinned and list rows agree.
   const pinnedRows: PinnedRow[] = useMemo(() => {
     const records = new Map(
-      (pinned.data ?? []).map((record) => [record.address, toPinnedRow(record, rankBy)]),
+      (pinned.data?.agents ?? []).map((record) => [record.address, toPinnedRow(record, rankBy)]),
     );
     const listRows = new Map(rows.map((row) => [row.address, row]));
+    const preferListRows = !!listSnapshot && pinned.data?.updatedAt !== listSnapshot;
     const pinnedList = pinnedAddresses.flatMap((address) => {
-      const row = records.get(address) ?? listRows.get(address);
+      const row = preferListRows
+        ? (listRows.get(address) ?? records.get(address))
+        : (records.get(address) ?? listRows.get(address));
       return row ? [{ ...row, flash: address === flashAddress }] : [];
     });
     return [
       ...pinnedList.filter((row) => row.rank !== null).sort((a, b) => a.rank! - b.rank!),
       ...pinnedList.filter((row) => row.rank === null),
     ];
-  }, [pinned.data, rows, pinnedAddresses, rankBy, flashAddress]);
+  }, [pinned.data, rows, listSnapshot, pinnedAddresses, rankBy, flashAddress]);
   const firstPage = list.data?.pages[0];
 
   const onTogglePin = useCallback(
@@ -169,7 +175,7 @@ export const Leaderboard = ({
 
   const isUnavailable = list.error instanceof LeaderboardRequestError && list.error.status === 503;
   // The snapshot changed under "Load more": the list is starting over from the first page
-  const isRestarting = list.error instanceof LeaderboardRequestError && list.error.status === 409;
+  const { isRestarting } = list;
   // A failed "Load more" keeps the rows already loaded
   const hasListFailed = list.isError && !list.data && !isRestarting;
   // Covers retries too: until a page arrives the table shows a spinner, not an empty state
@@ -223,7 +229,7 @@ export const Leaderboard = ({
               onClearSearch={() => setSearchInput('')}
               hasMore={!!list.hasNextPage}
               isLoadingMore={list.isFetchingNextPage}
-              hasLoadMoreFailed={list.isFetchNextPageError}
+              hasLoadMoreFailed={list.isFetchNextPageError && !isRestarting}
               onLoadMore={() => list.fetchNextPage()}
               agentType={agentType}
               rankBy={rankBy}

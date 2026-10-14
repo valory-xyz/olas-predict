@@ -70,6 +70,45 @@ export const shouldRestartFromSnapshot = (
 ): conflictUpdatedAt is string =>
   !!conflictUpdatedAt && (!currentUpdatedAt || conflictUpdatedAt > currentUpdatedAt);
 
+/**
+ * Whether and how the list starts over from its first page after a failed request:
+ * `{ snapshot }` pins the first page to that snapshot, `{ snapshot: null }` asks for whatever is
+ * current, `null` keeps the list as it is (with its error).
+ *
+ * - A failed background refetch keeps its pages, which all come from one snapshot; the next
+ *   Load more decides.
+ * - A `409` after a failed Load more (or with nothing shown) restarts from its newer snapshot;
+ *   one that is not newer (the stored snapshot went back) restarts without a pin.
+ * - A `503` that outlasted the retries on a pinned first page (an instance kept holding an
+ *   older snapshot) restarts without a pin, so the list never spins forever. A failed Load more
+ *   otherwise keeps the rows shown, with its error.
+ */
+export const getListRestart = ({
+  status,
+  conflictUpdatedAt,
+  shownSnapshot,
+  pinnedSnapshot,
+  isLoadMoreError,
+  hasData,
+}: {
+  status: number | undefined;
+  conflictUpdatedAt: string | undefined;
+  shownSnapshot: string | undefined;
+  /** The snapshot the failed first page was pinned to, if any */
+  pinnedSnapshot: string | undefined;
+  isLoadMoreError: boolean;
+  hasData: boolean;
+}): { snapshot: string | null } | null => {
+  if (hasData && !isLoadMoreError) return null;
+  if (status === 409) {
+    return shouldRestartFromSnapshot(conflictUpdatedAt, shownSnapshot)
+      ? { snapshot: conflictUpdatedAt }
+      : { snapshot: null };
+  }
+  if (status === 503 && !hasData && pinnedSnapshot) return { snapshot: null };
+  return null;
+};
+
 /** The first of `names` given more than once in the query, if any */
 export const findRepeatedParam = (
   query: Partial<Record<string, QueryValue>>,

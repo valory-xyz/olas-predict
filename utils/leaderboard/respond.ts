@@ -25,6 +25,17 @@ export const sendUnavailable = (res: NextApiResponse<LeaderboardErrorResponse>) 
 };
 
 /**
+ * A later page asked for a snapshot newer than the one this instance holds (it checked Blob
+ * moments ago, before the snapshot was replaced): a retryable `503`, so the client's retry
+ * with back-off reaches an up-to-date instance instead of restarting onto an older snapshot
+ */
+export const sendSnapshotNotYetAvailable = (res: NextApiResponse<LeaderboardErrorResponse>) => {
+  res.setHeader('Cache-Control', NO_STORE);
+  res.setHeader('Retry-After', '2');
+  return res.status(503).json({ error: 'Leaderboard snapshot not available here yet' });
+};
+
+/**
  * A later page asked for a snapshot that has been replaced: the client starts over from the
  * first page of `updatedAt`
  */

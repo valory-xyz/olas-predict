@@ -23,6 +23,7 @@ import { pageById } from '../utils/leaderboard/paging.ts';
 import {
   findRepeatedParam,
   getLeaderboardUrl,
+  getListRestart,
   parseAddress,
   parseAgentType,
   parseInteger,
@@ -750,6 +751,49 @@ test('a 409 restarts the list only from a newer snapshot than the one shown', ()
   assert.equal(shouldRestartFromSnapshot(shown, shown), false);
   assert.equal(shouldRestartFromSnapshot(undefined, shown), false);
   assert.equal(shouldRestartFromSnapshot(shown, undefined), true);
+});
+
+test('the list restarts only after a failed Load more or with nothing shown, and never spins', () => {
+  const S0 = '2026-10-13T10:00:00.000Z';
+  const S1 = '2026-10-13T11:00:00.000Z';
+  const base = {
+    status: 409,
+    conflictUpdatedAt: S1,
+    shownSnapshot: S0,
+    pinnedSnapshot: undefined,
+    isLoadMoreError: true,
+    hasData: true,
+  };
+  // Load more found a newer snapshot: start over from it
+  assert.deepEqual(getListRestart(base), { snapshot: S1 });
+  // A failed background refetch keeps the pages it has
+  assert.equal(getListRestart({ ...base, isLoadMoreError: false }), null);
+  // The stored snapshot went back: start over from whatever is current, not from S0
+  assert.deepEqual(getListRestart({ ...base, conflictUpdatedAt: S0, shownSnapshot: S1 }), {
+    snapshot: null,
+  });
+  // Nothing shown yet: any snapshot the server names will do, so the list never spins
+  assert.deepEqual(
+    getListRestart({
+      ...base,
+      conflictUpdatedAt: S0,
+      shownSnapshot: undefined,
+      pinnedSnapshot: S1,
+      isLoadMoreError: false,
+      hasData: false,
+    }),
+    { snapshot: S0 },
+  );
+  // A pinned first page that kept getting 503 (an instance behind) starts over unpinned
+  const behind = { ...base, status: 503, conflictUpdatedAt: undefined, isLoadMoreError: false };
+  assert.deepEqual(getListRestart({ ...behind, hasData: false, pinnedSnapshot: S1 }), {
+    snapshot: null,
+  });
+  // An unpinned 503 is a real outage: show it
+  assert.equal(getListRestart({ ...behind, hasData: false }), null);
+  // A failed Load more for any other reason keeps the rows
+  assert.equal(getListRestart({ ...base, status: 503, conflictUpdatedAt: undefined }), null);
+  assert.equal(getListRestart({ ...base, status: 500, conflictUpdatedAt: undefined }), null);
 });
 
 test('a snapshot window entry pairs ranks and metrics with the absence of a reason', () => {

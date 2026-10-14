@@ -20,6 +20,7 @@ import {
   sendBadRequest,
   sendMethodNotAllowed,
   sendSnapshotChanged,
+  sendSnapshotNotYetAvailable,
   sendUnavailable,
   setSuccessCacheHeaders,
 } from 'utils/leaderboard/respond';
@@ -30,8 +31,10 @@ const PARAMS = ['agentType', 'rankBy', 'window', 'offset', 'limit', 'search', 's
 
 /**
  * Public: the ranked list for one agent type, criterion and window, paged, with name search.
- * Later pages pass the first page's `updatedAt` as `snapshot`; once that snapshot has been
- * replaced the route answers `409` with the current `updatedAt`, so pages never mix snapshots.
+ * Later pages pass the first page's `updatedAt` as `snapshot`, so pages never mix snapshots:
+ * once that snapshot has been replaced the route answers `409` with the current `updatedAt`
+ * (the client starts over from it); when the client's snapshot is newer than the one this
+ * instance holds, it answers a retryable `503`.
  */
 const handler = async (
   req: NextApiRequest,
@@ -71,7 +74,9 @@ const handler = async (
   const { snapshot, isStale } = read;
   if (!snapshot) return sendUnavailable(res);
   if (expectedSnapshot !== undefined && expectedSnapshot !== snapshot.updatedAt) {
-    return sendSnapshotChanged(res, snapshot.updatedAt);
+    return expectedSnapshot > snapshot.updatedAt
+      ? sendSnapshotNotYetAvailable(res)
+      : sendSnapshotChanged(res, snapshot.updatedAt);
   }
 
   const page = getLeaderboardPage({ snapshot, window, rankBy, search, offset, limit });
