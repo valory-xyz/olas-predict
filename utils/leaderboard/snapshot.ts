@@ -101,8 +101,8 @@ export const withBlobTimeout = async <T>(
       pending,
       new Promise<never>((_, reject) => {
         timer = setTimeout(() => {
-          controller.abort();
           reject(new Error(`Blob ${what} timed out after ${timeoutMs} ms`));
+          controller.abort();
         }, timeoutMs);
       }),
     ]);
