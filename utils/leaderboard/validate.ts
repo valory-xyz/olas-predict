@@ -27,12 +27,28 @@ const isMetrics = (value: unknown) =>
   typeof value.volume === 'number' &&
   typeof value.trades === 'number';
 
-/** A ranked entry has both ranks and its metrics; a not-ranked one has a reason and none */
-const isWindowEntry = (value: unknown) => {
+/** A lowercased address, as the routes look Safes up by */
+const isAddress = (value: unknown) => typeof value === 'string' && /^0x[0-9a-f]{40}$/.test(value);
+
+/** A `Date#toISOString` timestamp */
+const isCanonicalTimestamp = (value: unknown) => {
+  if (typeof value !== 'string') return false;
+  const time = Date.parse(value);
+  return !Number.isNaN(time) && new Date(time).toISOString() === value;
+};
+
+const isRank = (value: unknown, totalRanked: number) =>
+  Number.isInteger(value) && (value as number) >= 1 && (value as number) <= totalRanked;
+
+/**
+ * A ranked entry has both ranks (integers from 1 to the window's `totalRanked`) and its
+ * metrics; a not-ranked one has a reason and none
+ */
+const isWindowEntry = (value: unknown, totalRanked: number) => {
   if (!isRecord(value)) return false;
   const { metrics, rankByRoi, rankByPnl, notRankedReason } = value;
   if (notRankedReason === null) {
-    return typeof rankByRoi === 'number' && typeof rankByPnl === 'number' && isMetrics(metrics);
+    return isRank(rankByRoi, totalRanked) && isRank(rankByPnl, totalRanked) && isMetrics(metrics);
   }
   return (
     NOT_RANKED_REASON_VALUES.includes(notRankedReason) &&
@@ -42,30 +58,55 @@ const isWindowEntry = (value: unknown) => {
   );
 };
 
-const isSnapshotAgent = (value: unknown) =>
+const isSnapshotAgent = (value: unknown, totalRanked: Record<string, number>) =>
   isRecord(value) &&
-  typeof value.address === 'string' &&
+  isAddress(value.address) &&
   typeof value.name === 'string' &&
   isRecord(value.windows) &&
-  LEADERBOARD_WINDOWS.every((window) => isWindowEntry((value.windows as never)[window]));
+  LEADERBOARD_WINDOWS.every((window) =>
+    isWindowEntry((value.windows as never)[window], totalRanked[window]),
+  );
+
+/** Each window's `totalRanked` is the number of agents ranked there */
+const hasRankedCounts = (agents: unknown[], totalRanked: Record<string, number>) =>
+  LEADERBOARD_WINDOWS.every(
+    (window) =>
+      agents.filter(
+        (agent) =>
+          (agent as { windows: Record<string, { notRankedReason: unknown }> }).windows[window]
+            .notRankedReason === null,
+      ).length === totalRanked[window],
+  );
 
 /**
  * Whether `data` is a current-schema snapshot for `agentType`, complete enough for the API
- * routes to answer from (every window present for every agent).
+ * routes to answer from (every window present for every agent) and consistent: canonical
+ * `updatedAt` (clients echo it as `snapshot`), lowercased addresses, integer ranks within each
+ * window's `totalRanked`, which counts the ranked agents.
  */
-export const isValidSnapshot = (data: unknown, agentType: AgentType): data is LeaderboardSnapshot =>
-  isRecord(data) &&
-  data.schemaVersion === LEADERBOARD_SNAPSHOT_SCHEMA_VERSION &&
-  data.agentType === agentType &&
-  typeof data.updatedAt === 'string' &&
-  isRecord(data.totalRanked) &&
-  LEADERBOARD_WINDOWS.every(
-    (window) => typeof (data.totalRanked as Record<string, unknown>)[window] === 'number',
-  ) &&
-  Array.isArray(data.agents) &&
-  data.agents.every(isSnapshotAgent) &&
-  (data.excluded === undefined ||
-    (Array.isArray(data.excluded) && data.excluded.every((a) => typeof a === 'string')));
+export const isValidSnapshot = (
+  data: unknown,
+  agentType: AgentType,
+): data is LeaderboardSnapshot => {
+  if (
+    !isRecord(data) ||
+    data.schemaVersion !== LEADERBOARD_SNAPSHOT_SCHEMA_VERSION ||
+    data.agentType !== agentType ||
+    !isCanonicalTimestamp(data.updatedAt) ||
+    !isRecord(data.totalRanked) ||
+    !Array.isArray(data.agents)
+  ) {
+    return false;
+  }
+  const totalRanked = data.totalRanked as Record<string, number>;
+  return (
+    LEADERBOARD_WINDOWS.every((window) => Number.isInteger(totalRanked[window])) &&
+    data.agents.every((agent) => isSnapshotAgent(agent, totalRanked)) &&
+    hasRankedCounts(data.agents, totalRanked) &&
+    (data.excluded === undefined ||
+      (Array.isArray(data.excluded) && data.excluded.every(isAddress)))
+  );
+};
 
 const isNumberTuple = (value: unknown, length: number) =>
   Array.isArray(value) &&

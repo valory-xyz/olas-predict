@@ -562,7 +562,16 @@ test('search lists only ranked matches, with their rank in the full leaderboard'
   assert.equal(totalResults, 1);
 });
 
+// The fixture's short addresses, as full lowercased addresses for the validator
+const fullAddress = (address) => `0x${address.slice(2).padStart(40, '0')}`;
+const storedSnapshot = {
+  ...snapshot,
+  excluded: snapshot.excluded.map(fullAddress),
+  agents: snapshot.agents.map((agent) => ({ ...agent, address: fullAddress(agent.address) })),
+};
+
 test('a snapshot read back must have the expected shape and agent type', () => {
+  const snapshot = storedSnapshot;
   assert.equal(isValidSnapshot(snapshot, 'omenstrat'), true);
   assert.equal(isValidSnapshot(snapshot, 'polystrat'), false);
   assert.equal(isValidSnapshot({ ...snapshot, schemaVersion: 2 }, 'omenstrat'), false);
@@ -797,12 +806,19 @@ test('the list restarts only after a failed Load more or with nothing shown, and
 });
 
 test('a snapshot window entry pairs ranks and metrics with the absence of a reason', () => {
+  const snapshot = storedSnapshot;
   const withEntry = (windowEntry) => ({
     ...snapshot,
+    totalRanked: { ...snapshot.totalRanked, '7d': windowEntry.notRankedReason === null ? 2 : 1 },
     agents: [
       {
         ...snapshot.agents[0],
         windows: { ...snapshot.agents[0].windows, '7d': windowEntry },
+      },
+      // Ranked first in 7D, so its ranks fit whatever the window's total
+      {
+        ...snapshot.agents[1],
+        windows: { ...snapshot.agents[1].windows, '7d': entry(1, 1) },
       },
     ],
   });
@@ -819,6 +835,35 @@ test('a snapshot window entry pairs ranks and metrics with the absence of a reas
   // A reason with ranks or metrics
   assert.equal(valid({ ...ranked, notRankedReason: 'not_ranked_yet' }), false);
   assert.equal(valid({ ...ranked, notRankedReason: 'other' }), false);
+  // Ranks are integers from 1 to the window's totalRanked
+  assert.equal(valid(entry(0, 1)), false);
+  assert.equal(valid(entry(1.5, 1)), false);
+  assert.equal(valid(entry(1, 3)), false);
+});
+
+test('a snapshot must be consistent: canonical updatedAt, lowercased addresses, ranked count', () => {
+  const snapshot = storedSnapshot;
+  assert.equal(isValidSnapshot({ ...snapshot, updatedAt: 'yesterday' }, 'omenstrat'), false);
+  assert.equal(
+    isValidSnapshot({ ...snapshot, updatedAt: '2026-10-09T12:00:00Z' }, 'omenstrat'),
+    false,
+  );
+  const [first, ...rest] = snapshot.agents;
+  const mixedCase = { ...first, address: first.address.replace('0x0', '0xA') };
+  assert.equal(isValidSnapshot({ ...snapshot, agents: [mixedCase, ...rest] }, 'omenstrat'), false);
+  assert.equal(
+    isValidSnapshot({ ...snapshot, agents: [{ ...first, address: '0x1' }, ...rest] }, 'omenstrat'),
+    false,
+  );
+  assert.equal(isValidSnapshot({ ...snapshot, excluded: ['0x8'] }, 'omenstrat'), false);
+  // totalRanked must count the ranked agents
+  assert.equal(
+    isValidSnapshot(
+      { ...snapshot, totalRanked: { ...snapshot.totalRanked, '30d': 3 } },
+      'omenstrat',
+    ),
+    false,
+  );
 });
 
 test('a builder state read back must have the expected shape', () => {
