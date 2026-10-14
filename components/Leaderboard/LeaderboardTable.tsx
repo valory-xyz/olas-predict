@@ -7,7 +7,7 @@ import { CSSProperties, ReactNode } from 'react';
 import styled, { keyframes } from 'styled-components';
 
 import { AGENTS, AgentType, NA, POLYGON_SCAN_URL } from 'constants/index';
-import { NOT_RANKED_COPY, RankBy } from 'constants/leaderboard';
+import { NOT_RANKED_COPY, NOT_RANKED_SHORT_COPY, RankBy } from 'constants/leaderboard';
 import { COLOR, MEDIA_QUERY } from 'constants/theme';
 import { useScreen } from 'hooks/useScreen';
 import type { LeaderboardRow } from 'types/leaderboard';
@@ -36,20 +36,31 @@ const flash = keyframes`
 `;
 
 const StyledTable = styled(Table<LeaderboardRow>)`
+  /* The table's own width, for the reason below, whatever the gutters and paddings around it */
+  container-type: inline-size;
+
   /* The reason spans every metric column, wider than a phone: keep it next to the fixed
      agent column and wrap it within the visible width, instead of right-aligning it off-screen */
   .not-ranked-message {
     display: block;
     position: sticky;
     left: var(--leaderboard-fixed-width);
-    max-width: calc(100vw - var(--leaderboard-fixed-width) - 64px);
+    max-width: calc(100cqw - var(--leaderboard-fixed-width) - 16px);
     text-align: left;
     white-space: normal;
+  }
+  /* Sticky pinned rows on a phone: one line, so a few of them don't cover the screen */
+  .not-ranked-message.compact {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .ant-table,
   .ant-table-container,
-  .ant-table-summary {
+  .ant-table-summary,
+  .ant-table-tbody > tr.ant-table-placeholder,
+  .ant-table-tbody > tr.ant-table-placeholder:hover > td {
     background: transparent;
   }
   .ant-table-cell {
@@ -90,6 +101,9 @@ const StyledTable = styled(Table<LeaderboardRow>)`
 `;
 
 export type PinnedRow = LeaderboardRow & { flash?: boolean };
+
+/** A row rendered with the one-line not-ranked reason (sticky pinned rows on a phone) */
+type CompactRow = LeaderboardRow & { isCompact?: boolean };
 
 /** Volume and Avg trade size are never negative; a signed figure passes its absolute value */
 const formatUsd = (value: number) =>
@@ -180,14 +194,23 @@ type ColumnOptions = {
 
 /** A metric cell, or for an agent not ranked in the window one cell with the reason */
 const metricCell = (render: (row: LeaderboardRow) => ReactNode, isFirstMetric: boolean) => ({
-  render: (_: unknown, row: LeaderboardRow) =>
-    row.notRankedReason ? (
-      <Text type="secondary" className="not-ranked-message">
-        {NOT_RANKED_COPY[row.notRankedReason]}
-      </Text>
-    ) : (
-      render(row)
-    ),
+  render: (_: unknown, row: CompactRow) => {
+    if (!row.notRankedReason) return render(row);
+    if (!row.isCompact) {
+      return (
+        <Text type="secondary" className="not-ranked-message">
+          {NOT_RANKED_COPY[row.notRankedReason]}
+        </Text>
+      );
+    }
+    return (
+      <Tooltip title={NOT_RANKED_COPY[row.notRankedReason]}>
+        <Text type="secondary" className="not-ranked-message compact">
+          {NOT_RANKED_SHORT_COPY[row.notRankedReason]}
+        </Text>
+      </Tooltip>
+    );
+  },
   onCell: (row: LeaderboardRow) =>
     row.notRankedReason ? { colSpan: isFirstMetric ? METRIC_COLUMN_COUNT : 0 } : {},
 });
@@ -420,7 +443,13 @@ export const LeaderboardTable = ({
                         className={column.className}
                         align={column.align}
                       >
-                        {column.render?.(undefined, row, index) as ReactNode}
+                        {
+                          column.render?.(
+                            undefined,
+                            isMobile ? ({ ...row, isCompact: true } as CompactRow) : row,
+                            index,
+                          ) as ReactNode
+                        }
                       </Table.Summary.Cell>
                     );
                   })}
