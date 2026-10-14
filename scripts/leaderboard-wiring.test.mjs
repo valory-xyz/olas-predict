@@ -291,11 +291,63 @@ test('a run whose sources shrank prunes and publishes nothing', async () => {
   await assert.rejects(buildLeaderboard('polystrat', state, FAR()), PopulationDropError);
   assert.deepEqual(state.tallies, before.tallies);
   assert.deepEqual(state.mech, before.mech);
-  assert.equal(state.population.suspectRuns, 1);
+  assert.ok(state.population.suspectSince);
   // The source height going back is refused too
   world.daysByAgent = days;
   world.sourceHeight = 10;
   await assert.rejects(buildLeaderboard('polystrat', state, FAR()), /height/);
+});
+
+test('a re-syncing source is refused however long it lasts, and never empties the board', async () => {
+  const world = polystratWorld();
+  const state = createEmptyState();
+  const first = await buildLeaderboard('polystrat', state, FAR());
+  assert.equal(first.snapshot.agents.length, 2);
+  const before = structuredClone(state);
+  const days = world.daysByAgent;
+  try {
+    // Re-syncing: an older height and no statistics, run after run, for more than a day
+    world.sourceHeight = 10;
+    world.daysByAgent = new Map();
+    for (let run = 0; run < 5; run++) {
+      await assert.rejects(buildLeaderboard('polystrat', state, FAR()), /height went back/);
+      clockOffset += 8 * 3600_000;
+    }
+    // Half-synced: an older height with one of the two agents
+    world.sourceHeight = 500;
+    world.daysByAgent = new Map([[A, days.get(A)]]);
+    for (let run = 0; run < 4; run++) {
+      await assert.rejects(buildLeaderboard('polystrat', state, FAR()), /height went back/);
+    }
+    assert.deepEqual(state.mech, before.mech);
+    assert.deepEqual(state.tallies, before.tallies);
+    assert.deepEqual(state.population, before.population);
+
+    // Caught up past the stored height but with one agent: refused until it lasted a day,
+    // whatever the number of runs
+    world.sourceHeight = 1100;
+    for (let run = 0; run < 4; run++) {
+      await assert.rejects(buildLeaderboard('polystrat', state, FAR()), PopulationDropError);
+    }
+    assert.deepEqual(state.mech, before.mech);
+    clockOffset += 24 * 3600_000;
+    const accepted = await buildLeaderboard('polystrat', state, FAR());
+    assert.deepEqual(
+      accepted.snapshot.agents.map(({ address }) => address),
+      [A],
+    );
+    assert.equal(state.population.suspectSince, null);
+
+    // No Pearl agents at all, at a rising height: refused even after a day
+    world.sourceHeight = 1200;
+    world.daysByAgent = new Map([[C, days.get(C)]]);
+    await assert.rejects(buildLeaderboard('polystrat', state, FAR()), /without Pearl agents/);
+    clockOffset += 48 * 3600_000;
+    await assert.rejects(buildLeaderboard('polystrat', state, FAR()), /without Pearl agents/);
+    assert.ok(state.mech[A]);
+  } finally {
+    clockOffset = 0;
+  }
 });
 
 test('an Omen market waiting out its answer timeout is due at finalization, without a miss', async () => {

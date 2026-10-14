@@ -51,7 +51,7 @@ import {
 } from '../utils/leaderboard/pending.ts';
 import { parseStoredPins } from '../utils/leaderboard/pins.ts';
 import {
-  ACCEPT_POPULATION_DROP_AFTER_RUNS,
+  ACCEPT_POPULATION_DROP_AFTER_MS,
   checkPopulation,
 } from '../utils/leaderboard/population.ts';
 import { assignRanks, getNotRankedReason, searchByName } from '../utils/leaderboard/ranking.ts';
@@ -1090,34 +1090,55 @@ test('a market waiting for its finalization is due then, without a miss', () => 
   assert.deepEqual(recordMarketMiss(check, 25 * HOUR), [26 * HOUR, 1]);
 });
 
-test('a run whose sources shrank or went back is refused, then accepted if it lasts', () => {
-  const previous = { sourceHeight: 1000, activeAgents: 500, pearlAgents: 100, suspectRuns: 0 };
+test('a drop is refused, then accepted after it lasts; a height that went back never is', () => {
+  const t0 = 1_000_000;
+  const previous = { sourceHeight: 1000, activeAgents: 500, pearlAgents: 100, suspectSince: null };
   const same = { sourceHeight: 1100, activeAgents: 480, pearlAgents: 95 };
-  assert.deepEqual(checkPopulation(previous, same), {
-    record: { ...same, suspectRuns: 0 },
+  assert.deepEqual(checkPopulation(previous, same, t0), {
+    record: { ...same, suspectSince: null },
     refusal: null,
     accepted: null,
   });
-  // Nothing to compare with
-  assert.equal(checkPopulation(undefined, { ...same, activeAgents: 0 }).refusal, null);
+  // Nothing to compare with; a record saved before `suspectSince` existed
+  assert.equal(checkPopulation(undefined, { ...same, activeAgents: 0 }, t0).refusal, null);
+  assert.equal(checkPopulation({ ...previous, suspectSince: undefined }, same, t0).refusal, null);
   // A reorg's worth of blocks back is fine; more is not
-  assert.equal(checkPopulation(previous, { ...same, sourceHeight: 950 }).refusal, null);
-  assert.match(checkPopulation(previous, { ...same, sourceHeight: 800 }).refusal, /height/);
-  assert.match(checkPopulation(previous, { ...same, activeAgents: 1 }).refusal, /active agents/);
-  assert.match(checkPopulation(previous, { ...same, pearlAgents: 0 }).refusal, /Pearl agents/);
+  assert.equal(checkPopulation(previous, { ...same, sourceHeight: 950 }, t0).refusal, null);
+  assert.match(checkPopulation(previous, { ...same, sourceHeight: 800 }, t0).refusal, /height/);
+  assert.match(checkPopulation(previous, { ...same, activeAgents: 1 }, t0).refusal, /active/);
+  assert.match(checkPopulation(previous, { ...same, pearlAgents: 1 }, t0).refusal, /Pearl/);
 
-  // A lasting drop is accepted on the last of ACCEPT_POPULATION_DROP_AFTER_RUNS runs
+  // A lasting drop with a rising height is accepted once it has lasted long enough, however
+  // many runs saw it
   const shrunk = { sourceHeight: 1200, activeAgents: 100, pearlAgents: 20 };
   let record = previous;
-  for (let run = 1; run < ACCEPT_POPULATION_DROP_AFTER_RUNS; run++) {
-    const result = checkPopulation(record, shrunk);
+  for (const at of [t0, t0 + 1, t0 + 2, t0 + ACCEPT_POPULATION_DROP_AFTER_MS - 1]) {
+    const result = checkPopulation(record, shrunk, at);
     assert.ok(result.refusal);
-    // The baseline stays the last accepted run
-    assert.equal(result.record.activeAgents, 500);
+    // The baseline stays the last accepted run; the clock starts at the first suspect run
+    assert.deepEqual(result.record, { ...previous, suspectSince: t0 });
     record = result.record;
   }
-  const last = checkPopulation(record, shrunk);
+  const last = checkPopulation(record, shrunk, t0 + ACCEPT_POPULATION_DROP_AFTER_MS);
   assert.equal(last.refusal, null);
   assert.ok(last.accepted);
-  assert.deepEqual(last.record, { ...shrunk, suspectRuns: 0 });
+  assert.deepEqual(last.record, { ...shrunk, suspectSince: null });
+
+  // A height that went back is refused for good, until the source catches up
+  const behind = { sourceHeight: 10, activeAgents: 0, pearlAgents: 0 };
+  record = previous;
+  for (const at of [t0, t0 + 2 * ACCEPT_POPULATION_DROP_AFTER_MS]) {
+    const result = checkPopulation(record, behind, at);
+    assert.match(result.refusal, /height went back from 1000 to 10/);
+    assert.equal(result.record.suspectSince, null);
+    record = result.record;
+  }
+  assert.equal(checkPopulation(record, { ...same, sourceHeight: 1000 }, t0).refusal, null);
+
+  // No Pearl agents left is never accepted
+  const empty = { sourceHeight: 1200, activeAgents: 500, pearlAgents: 0 };
+  const first = checkPopulation(previous, empty, t0);
+  const later = checkPopulation(first.record, empty, t0 + 2 * ACCEPT_POPULATION_DROP_AFTER_MS);
+  assert.match(later.refusal, /without Pearl agents/);
+  assert.equal(later.record.pearlAgents, 100);
 });

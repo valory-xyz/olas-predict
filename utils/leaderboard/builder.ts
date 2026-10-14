@@ -351,11 +351,15 @@ export const buildLeaderboard = async (
 
   // Before anything is pruned or published: a source that suddenly answers with far fewer
   // agents, or from an older block, is more likely partial than right
-  const populationCheck = checkPopulation(state.population, {
-    sourceHeight: population.sourceHeight,
-    activeAgents: activeAgents.length,
-    pearlAgents: pearlAgents.length,
-  });
+  const populationCheck = checkPopulation(
+    state.population,
+    {
+      sourceHeight: population.sourceHeight,
+      activeAgents: activeAgents.length,
+      pearlAgents: pearlAgents.length,
+    },
+    Date.now(),
+  );
   state.population = populationCheck.record;
   if (populationCheck.refusal) {
     throw new PopulationDropError(
@@ -364,7 +368,7 @@ export const buildLeaderboard = async (
   }
   if (populationCheck.accepted) {
     console.error(
-      `Leaderboard: ${agentType} accepted after repeated runs: ${populationCheck.accepted}`,
+      `Leaderboard: ${agentType} accepted after a lasting drop: ${populationCheck.accepted}`,
     );
   }
 

@@ -130,7 +130,7 @@ const isPopulationRecord = (value: unknown) =>
   isNullableNumber(value.sourceHeight) &&
   typeof value.activeAgents === 'number' &&
   typeof value.pearlAgents === 'number' &&
-  typeof value.suspectRuns === 'number';
+  (value.suspectSince === undefined || isNullableNumber(value.suspectSince));
 
 const isMechEntry = (value: unknown) =>
   isRecord(value) &&
