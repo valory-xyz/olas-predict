@@ -82,7 +82,7 @@ globalThis.fetch = async (input) => {
   return originalFetch(input);
 };
 
-const { buildLeaderboard, MECH_FETCH_MAX_FAILURES } = await import(
+const { buildLeaderboard, isMechFullReadDue, MECH_FETCH_MAX_FAILURES } = await import(
   '../utils/leaderboard/builder.ts'
 );
 const { PopulationDropError } = await import('../utils/leaderboard/population.ts');
@@ -231,8 +231,37 @@ test('the builder classifies services, tallies settled markets and ranks Pearl a
     [],
   );
   const mechSince = world.calls.find(([, address]) => address === A)[2];
-  assert.equal(mechSince, state.mech[A].syncedTo - SECONDS_PER_DAY);
+  if (!isMechFullReadDue(A, now())) {
+    assert.equal(mechSince, state.mech[A].syncedTo - SECONDS_PER_DAY);
+  }
   assert.equal(state.mech[A].requests.length, 1);
+});
+
+test('once a day the whole mech window of each agent is re-read, for rows computed late', async () => {
+  const world = polystratWorld();
+  const state = createEmptyState();
+  // An hour outside A's slot, then A's slot on a later day
+  const hourOffset = (due) => {
+    for (let hours = 0; hours < 48; hours++) {
+      const at = now() + hours * 3600 + SECONDS_PER_DAY;
+      if (isMechFullReadDue(A, at) === due) return (at - now()) * 1000;
+    }
+    throw new Error('no slot');
+  };
+  try {
+    clockOffset = hourOffset(false);
+    await buildLeaderboard('polystrat', state, FAR());
+    // A request from three days ago that mech-analytics only computed now
+    world.mech[A].push({ title: 'Q2?', timestamp: now() - 3 * SECONDS_PER_DAY });
+    await buildLeaderboard('polystrat', state, FAR());
+    assert.equal(state.mech[A].requests.length, 1);
+    clockOffset = 0;
+    clockOffset = hourOffset(true);
+    await buildLeaderboard('polystrat', state, FAR());
+    assert.equal(state.mech[A].requests.length, 2);
+  } finally {
+    clockOffset = 0;
+  }
 });
 
 test('the builder reclassifies a service whose tokenURI changed', async () => {

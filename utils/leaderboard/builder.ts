@@ -54,6 +54,13 @@ export const MECH_REFETCH_OVERLAP_SECONDS = SECONDS_PER_DAY;
  */
 export const MECH_FETCH_MAX_FAILURES = 3;
 
+/**
+ * Whether this run re-reads the agent's whole mech window: once a day per agent, staggered by
+ * address over the hours, for requests mech-analytics computes more than a day late
+ */
+export const isMechFullReadDue = (address: string, nowSeconds: number) =>
+  parseInt(address.slice(-6), 16) % 24 === Math.floor(nowSeconds / 3600) % 24;
+
 export type BuildResult = {
   state: BuilderState;
   /** `null` while the backfill is incomplete; the previous snapshot stays in place */
@@ -123,6 +130,8 @@ const updatePearlFlags = async (
  * re-reads the requests from `MECH_REFETCH_OVERLAP_SECONDS` before the newest one stored and
  * replaces the stored ones from there: mech-analytics ingests requests with a delay (and only
  * once their payload is parsed), so the newest stored request is not a safe cursor on its own.
+ * Rows can also arrive more than a day late, so once a day each agent's whole window is re-read
+ * (`isMechFullReadDue`).
  * An agent cut short by the deadline keeps the requests fetched so far and resumes from them; a
  * failed fetch leaves the agent's stored requests as they were.
  */
@@ -138,9 +147,10 @@ const updateMechRequests = async (
   const done = await mapWithConcurrency(agents, AGENT_CONCURRENCY, async (address) => {
     if (isPastDeadline(deadline)) return false;
     const entry = state.mech[address];
-    const refetchFrom = entry
-      ? Math.max(keepFrom, entry.syncedTo - MECH_REFETCH_OVERLAP_SECONDS)
-      : keepFrom;
+    const refetchFrom =
+      entry && !isMechFullReadDue(address, Date.now() / 1000)
+        ? Math.max(keepFrom, entry.syncedTo - MECH_REFETCH_OVERLAP_SECONDS)
+        : keepFrom;
     let fetched;
     try {
       fetched = await fetchMechRequests(agentType, address, refetchFrom, deadline);
