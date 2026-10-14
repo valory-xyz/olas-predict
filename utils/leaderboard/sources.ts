@@ -373,6 +373,9 @@ export const fetchTokenUris = async (
             args: [BigInt(id)] as const,
           })),
           allowFailure: true,
+          // One `aggregate3` call per batch (viem splits at 1,024 bytes of calldata by
+          // default), so a failed RPC request fails the whole batch, as checked below
+          batchSize: 0,
         }),
         deadline,
       );
