@@ -49,11 +49,14 @@ export const NOT_RANKED_COPY: Record<NotRankedReason, string> = {
   not_eligible: 'Not eligible. The leaderboard ranks agents run in Pearl only.',
 };
 
-/** One-line versions for the sticky pinned rows on a phone; the full copy is in a tooltip */
+/**
+ * One-line versions for the sticky pinned rows on a phone, kept short for the narrow space
+ * beside the fixed columns; the full copy is in a tooltip
+ */
 export const NOT_RANKED_SHORT_COPY: Record<NotRankedReason, string> = {
-  not_ranked_yet: 'Not ranked yet',
-  not_enough_trades_in_window: 'Too few trades',
-  not_eligible: 'Pearl agents only',
+  not_ranked_yet: 'Unranked',
+  not_enough_trades_in_window: 'Few trades',
+  not_eligible: 'Not Pearl',
 };
 
 export const LEADERBOARD_QUERY_PARAMS = {
