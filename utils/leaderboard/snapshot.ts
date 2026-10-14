@@ -44,6 +44,8 @@ export type BuilderState = {
    * request time fetched (each run re-reads from a day before it)
    */
   mech: Record<string, { syncedTo: number; requests: [string, number][] }>;
+  /** Per agent: mech request fetches failed in a row; absent in states saved before it existed */
+  mechFailures?: Record<string, number>;
   /** Per agent: the tally of each market with a final answer (see `MarketTally`) */
   tallies: Record<string, MarketTallies>;
   /** Polymarket question id -> title key (Omen titles come with the daily statistics) */

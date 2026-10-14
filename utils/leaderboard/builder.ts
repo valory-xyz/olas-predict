@@ -48,6 +48,11 @@ const AGENT_CONCURRENCY = 8;
 const METADATA_PROBES = 3;
 /** How far back each run re-reads an agent's mech requests (see `updateMechRequests`) */
 export const MECH_REFETCH_OVERLAP_SECONDS = SECONDS_PER_DAY;
+/**
+ * An agent whose mech requests failed this many runs in a row no longer holds the snapshot
+ * back: it is published with the requests stored before, and reported
+ */
+export const MECH_FETCH_MAX_FAILURES = 3;
 
 export type BuildResult = {
   state: BuilderState;
@@ -55,6 +60,11 @@ export type BuildResult = {
   snapshot: LeaderboardSnapshot | null;
   /** Active services whose Pearl flag could not be read, left out of the snapshot */
   unresolvedServices: string[];
+  /**
+   * Pearl agents whose mech requests failed `MECH_FETCH_MAX_FAILURES` runs in a row: the
+   * snapshot uses the requests stored before
+   */
+  staleMechAgents: string[];
 };
 
 const isPastDeadline = (deadline: number) => Date.now() >= deadline;
@@ -107,7 +117,9 @@ const updatePearlFlags = async (
 };
 
 /**
- * Fetches each agent's new mech requests; `false` when time ran out or a fetch failed. Each run
+ * Fetches each agent's new mech requests; `complete` is `false` when time ran out or a fetch
+ * failed, unless that agent's fetch failed `MECH_FETCH_MAX_FAILURES` runs in a row: it is then
+ * in `staleAgents` and keeps its stored requests, so one agent cannot hold the board. Each run
  * re-reads the requests from `MECH_REFETCH_OVERLAP_SECONDS` before the newest one stored and
  * replaces the stored ones from there: mech-analytics ingests requests with a delay (and only
  * once their payload is parsed), so the newest stored request is not a safe cursor on its own.
@@ -121,6 +133,8 @@ const updateMechRequests = async (
   keepFrom: number,
   deadline: number,
 ) => {
+  const failures = (state.mechFailures ??= {});
+  const staleAgents: string[] = [];
   const done = await mapWithConcurrency(agents, AGENT_CONCURRENCY, async (address) => {
     if (isPastDeadline(deadline)) return false;
     const entry = state.mech[address];
@@ -132,8 +146,14 @@ const updateMechRequests = async (
       fetched = await fetchMechRequests(agentType, address, refetchFrom, deadline);
     } catch (error) {
       console.error(`Leaderboard: ${agentType} mech requests of ${address} unavailable`, error);
-      return false;
+      // Cut short by the deadline: not held against the agent
+      if (isPastDeadline(deadline)) return false;
+      failures[address] = (failures[address] ?? 0) + 1;
+      if (failures[address] < MECH_FETCH_MAX_FAILURES) return false;
+      staleAgents.push(address);
+      return true;
     }
+    delete failures[address];
     if (!fetched.complete && !fetched.requests.length) return false;
     const requests = (entry?.requests ?? []).filter(
       ([, timestamp]) => timestamp >= keepFrom && timestamp < refetchFrom,
@@ -148,7 +168,7 @@ const updateMechRequests = async (
     state.mech[address] = { syncedTo: newest, requests };
     return fetched.complete;
   });
-  return done.every(Boolean);
+  return { complete: done.every(Boolean), staleAgents };
 };
 
 /**
@@ -304,6 +324,10 @@ const pruneState = (
   Object.keys(state.mech).forEach((address) => {
     if (!pearlSet.has(address)) delete state.mech[address];
   });
+  const mechFailures = state.mechFailures ?? {};
+  Object.keys(mechFailures).forEach((address) => {
+    if (!pearlSet.has(address)) delete mechFailures[address];
+  });
   Object.keys(state.tallies).forEach((address) => {
     const markets = new Set(marketsByAgent.get(address) ?? []);
     const tallied = state.tallies[address];
@@ -341,7 +365,9 @@ export const buildLeaderboard = async (
     statistics = await fetchDailyStatistics(agentType, yearStart, nowSeconds, deadline);
   } catch (error) {
     // Nothing was fetched into the state yet: the next run starts over
-    if (error instanceof DeadlineError) return { state, snapshot: null, unresolvedServices: [] };
+    if (error instanceof DeadlineError) {
+      return { state, snapshot: null, unresolvedServices: [], staleMechAgents: [] };
+    }
     throw error;
   }
 
@@ -406,7 +432,7 @@ export const buildLeaderboard = async (
     deadline,
     titles?.lookup,
   );
-  const mechComplete = await updateMechRequests(
+  const { complete: mechComplete, staleAgents: staleMechAgents } = await updateMechRequests(
     agentType,
     state,
     pearlAddresses,
@@ -417,7 +443,7 @@ export const buildLeaderboard = async (
   pruneState(state, marketsByAgent, pearlAddresses);
 
   if (!pearlFlagsComplete || !titlesComplete || !talliesComplete || !mechComplete) {
-    return { state, snapshot: null, unresolvedServices };
+    return { state, snapshot: null, unresolvedServices, staleMechAgents };
   }
 
   const marketTitles: MarketTitles =
@@ -449,5 +475,5 @@ export const buildLeaderboard = async (
       tallies: state.tallies[address] ?? {},
     })),
   });
-  return { state, snapshot, unresolvedServices };
+  return { state, snapshot, unresolvedServices, staleMechAgents };
 };

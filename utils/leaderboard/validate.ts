@@ -153,6 +153,8 @@ export const isValidBuilderState = (data: unknown): data is BuilderState =>
   data.schemaVersion === LEADERBOARD_STATE_SCHEMA_VERSION &&
   isRecordOf(data.pearl, isPearlLookup) &&
   isRecordOf(data.mech, isMechEntry) &&
+  (data.mechFailures === undefined ||
+    isRecordOf(data.mechFailures, (failures) => typeof failures === 'number')) &&
   isRecordOf(data.tallies, (tallies) => isRecordOf(tallies, (tally) => isNumberTuple(tally, 4))) &&
   isRecordOf(data.titles, (title) => typeof title === 'string') &&
   (data.pendingMarkets === undefined ||

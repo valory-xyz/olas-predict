@@ -82,7 +82,9 @@ globalThis.fetch = async (input) => {
   return originalFetch(input);
 };
 
-const { buildLeaderboard } = await import('../utils/leaderboard/builder.ts');
+const { buildLeaderboard, MECH_FETCH_MAX_FAILURES } = await import(
+  '../utils/leaderboard/builder.ts'
+);
 const { PopulationDropError } = await import('../utils/leaderboard/population.ts');
 const { PEARL_LOOKUP_MAX_FAILURES } = await import('../utils/leaderboard/pearl.ts');
 const snapshotModule = await import('../utils/leaderboard/snapshot.ts');
@@ -273,12 +275,27 @@ test('an unavailable mech source holds the snapshot back and keeps the stored re
   const state = createEmptyState();
   await buildLeaderboard('polystrat', state, FAR());
   const stored = structuredClone(state.mech[A]);
-  sources.fetchMechRequests = async () => {
-    throw new Error('HTTP 503');
+  const fetchMechRequests = sources.fetchMechRequests;
+  // Only A's requests fail
+  sources.fetchMechRequests = async (type, address, ...rest) => {
+    if (address === A) throw new Error('HTTP 400');
+    return fetchMechRequests(type, address, ...rest);
   };
-  const { snapshot } = await buildLeaderboard('polystrat', state, FAR());
-  assert.equal(snapshot, null);
+  for (let run = 1; run < MECH_FETCH_MAX_FAILURES; run++) {
+    const { snapshot, staleMechAgents } = await buildLeaderboard('polystrat', state, FAR());
+    assert.equal(snapshot, null);
+    assert.deepEqual(staleMechAgents, []);
+  }
+  // Failing run after run, A no longer holds the board: published with its stored requests
+  const { snapshot, staleMechAgents } = await buildLeaderboard('polystrat', state, FAR());
+  assert.ok(snapshot);
+  assert.deepEqual(staleMechAgents, [A]);
   assert.deepEqual(state.mech[A], stored);
+  assert.equal(state.mechFailures[A], MECH_FETCH_MAX_FAILURES);
+  // A success clears the count
+  sources.fetchMechRequests = fetchMechRequests;
+  assert.deepEqual((await buildLeaderboard('polystrat', state, FAR())).staleMechAgents, []);
+  assert.equal(state.mechFailures[A], undefined);
   void world;
 });
 
@@ -642,6 +659,7 @@ test('the refresh saves progress, writes snapshots and fails a type whose save f
     assert.deepEqual(first.body.updated, ['polystrat']);
     assert.deepEqual(first.body.failed, ['omenstrat']);
     assert.equal(first.body.snapshotAgeSeconds.polystrat, 0);
+    assert.deepEqual(first.body.staleMechAgents, {});
     assert.ok(blobs.has('leaderboard/polystrat/snapshot.json'));
     assert.ok(blobs.has('leaderboard/polystrat/builder-state.json'));
     // The failed type's progress is saved too

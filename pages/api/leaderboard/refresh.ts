@@ -33,6 +33,11 @@ type RefreshResponse = {
    */
   unresolvedServices: Partial<Record<AgentType, string[]>>;
   /**
+   * Per agent type, Pearl agents whose mech requests failed several runs in a row; the
+   * snapshot was published with the requests stored before
+   */
+  staleMechAgents: Partial<Record<AgentType, string[]>>;
+  /**
    * Per agent type, age of the snapshot now served, in seconds; `null` when there is none yet
    * (or it could not be read)
    */
@@ -45,6 +50,7 @@ type RefreshResponse = {
 type TypeResult = {
   status: 'updated' | 'pending';
   unresolvedServices: string[];
+  staleMechAgents: string[];
   /** When this type's working state started from empty (epoch ms), if known */
   stateCreatedAt?: number;
 };
@@ -73,6 +79,7 @@ const refreshType = async (agentType: AgentType, deadline: number): Promise<Type
   return {
     status: build.snapshot ? 'updated' : 'pending',
     unresolvedServices: build.unresolvedServices,
+    staleMechAgents: build.staleMechAgents,
     stateCreatedAt: state.createdAt,
   };
 };
@@ -112,6 +119,7 @@ const handler = async (
     pending: [],
     failed: [],
     unresolvedServices: {},
+    staleMechAgents: {},
     snapshotAgeSeconds: {},
     stale: [],
     updatedAt: new Date(now).toISOString(),
@@ -123,6 +131,9 @@ const handler = async (
         response[result.value.status].push(agentType);
         if (result.value.unresolvedServices.length) {
           response.unresolvedServices[agentType] = result.value.unresolvedServices;
+        }
+        if (result.value.staleMechAgents.length) {
+          response.staleMechAgents[agentType] = result.value.staleMechAgents;
         }
       } else {
         console.error(`Leaderboard: ${agentType} refresh failed`, result.reason);
