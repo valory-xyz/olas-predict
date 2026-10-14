@@ -34,6 +34,7 @@ import {
   fetchOmenMarketAnswers,
   fetchPolymarketQuestions,
   fetchServiceMetadata,
+  fetchTokenUris,
   fetchTraderAgents,
   mapWithConcurrency,
   toTitleKey,
@@ -56,10 +57,12 @@ export type BuildResult = {
 const isPastDeadline = (deadline: number) => Date.now() >= deadline;
 
 /**
- * Looks up the Pearl flag of the services that need it (see `needsPearlLookup`); `false`
- * while a service's flag is still pending, i.e. a lookup failed fewer than
- * `PEARL_LOOKUP_MAX_FAILURES` runs in a row or time ran out, so the snapshot waits rather
- * than leave a Pearl agent out.
+ * Looks up the Pearl flag of the services that need it (see `needsPearlLookup`): each run reads
+ * every active service's tokenURI (one multicall per 50) and fetches the metadata of new
+ * services and of those whose URI changed. `false` while a service's flag is still pending,
+ * i.e. a lookup failed fewer than `PEARL_LOOKUP_MAX_FAILURES` runs in a row or was not made
+ * (time ran out, RPC or gateway down), so the snapshot waits rather than leave a Pearl agent
+ * out. Infrastructure failures do not count as failed lookups.
  */
 const updatePearlFlags = async (
   agentType: AgentType,
@@ -68,14 +71,27 @@ const updatePearlFlags = async (
   deadline: number,
 ) => {
   const now = Date.now();
-  const toLookUp = serviceIds.filter((id) => needsPearlLookup(state.pearl[id], now));
-  const { metadata, failed } = await fetchServiceMetadata(agentType, toLookUp, deadline);
+  const { uris, failed: unreadable } = await fetchTokenUris(agentType, serviceIds, deadline);
+  const toLookUp = serviceIds.filter(
+    (id) => uris.has(id) && needsPearlLookup(state.pearl[id], now, uris.get(id)),
+  );
+  const { metadata, failed } = await fetchServiceMetadata(
+    toLookUp.map((id) => [id, uris.get(id) as string]),
+    deadline,
+  );
   metadata.forEach((value, id) => {
-    state.pearl[id] = recordPearlLookup(state.pearl[id], classifyService(agentType, value), now);
+    state.pearl[id] = recordPearlLookup(
+      state.pearl[id],
+      classifyService(agentType, value),
+      now,
+      uris.get(id),
+    );
   });
-  failed.forEach((id) => {
-    state.pearl[id] = recordPearlLookup(state.pearl[id], null, now);
-  });
+  [...unreadable.filter((id) => needsPearlLookup(state.pearl[id], now)), ...failed].forEach(
+    (id) => {
+      state.pearl[id] = recordPearlLookup(state.pearl[id], null, now);
+    },
+  );
   return serviceIds.every((id) => !isPearlLookupPending(state.pearl[id]));
 };
 

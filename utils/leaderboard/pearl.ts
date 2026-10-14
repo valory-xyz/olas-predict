@@ -42,6 +42,12 @@ export type PearlLookup = {
   checkedAt: number;
   /** Lookups failed in a row (tokenURI or metadata unreadable) */
   failures: number;
+  /**
+   * The `ServiceRegistry.tokenURI` the status was read from. The URI changes with the service's
+   * config hash (`ServiceRegistry.update`, Pearl rewriting an older service's description), and
+   * a changed URI is classified again.
+   */
+  uri?: string;
 };
 
 /**
@@ -55,14 +61,23 @@ export const PEARL_LOOKUP_RETRY_MS = 6 * 60 * 60 * 1000;
 /** How long malformed metadata is trusted before it is read again */
 export const PEARL_MALFORMED_RECHECK_MS = 24 * 60 * 60 * 1000;
 
-/** Whether a service still needs a (first, repeated or periodic) lookup */
-export const needsPearlLookup = (lookup: PearlLookup | undefined, now: number): boolean => {
+/**
+ * Whether a service still needs a (first, repeated or periodic) lookup. `uri` is its current
+ * tokenURI when this run could read it: a classified service whose URI changed (or was never
+ * stored) is looked up again, with the same retry pacing as a failed first lookup.
+ */
+export const needsPearlLookup = (
+  lookup: PearlLookup | undefined,
+  now: number,
+  uri?: string,
+): boolean => {
   if (!lookup) return true;
+  const isRetryDue =
+    lookup.failures < PEARL_LOOKUP_MAX_FAILURES || now - lookup.checkedAt >= PEARL_LOOKUP_RETRY_MS;
+  if (lookup.status !== null && uri !== undefined && lookup.uri !== uri) return isRetryDue;
   if (lookup.status === 'pearl' || lookup.status === 'other') return false;
   if (lookup.status === 'malformed') return now - lookup.checkedAt >= PEARL_MALFORMED_RECHECK_MS;
-  return (
-    lookup.failures < PEARL_LOOKUP_MAX_FAILURES || now - lookup.checkedAt >= PEARL_LOOKUP_RETRY_MS
-  );
+  return isRetryDue;
 };
 
 /** Whether a snapshot must wait for this service's lookup */
@@ -73,13 +88,24 @@ export const isPearlLookupPending = (lookup: PearlLookup | undefined): boolean =
 export const isPearlLookupUnresolved = (lookup: PearlLookup | undefined): boolean =>
   !!lookup && lookup.status === null && lookup.failures >= PEARL_LOOKUP_MAX_FAILURES;
 
-/** The lookup after one attempt: `classification` on success, `null` when it failed */
+/**
+ * The lookup after one attempt: `classification` (read from `uri`) on success, `null` when it
+ * failed. A failed re-check keeps the previous answer and the URI it was read from, so a
+ * changed URI is tried again.
+ */
 export const recordPearlLookup = (
   previous: PearlLookup | undefined,
   classification: PearlClassification | null,
   now: number,
-): PearlLookup =>
-  classification
-    ? { status: classification, checkedAt: now, failures: 0 }
-    : // A failed re-check of malformed metadata keeps the previous answer
-      { status: previous?.status ?? null, checkedAt: now, failures: (previous?.failures ?? 0) + 1 };
+  uri?: string,
+): PearlLookup => {
+  if (classification) {
+    return { status: classification, checkedAt: now, failures: 0, ...(uri ? { uri } : {}) };
+  }
+  return {
+    status: previous?.status ?? null,
+    checkedAt: now,
+    failures: (previous?.failures ?? 0) + 1,
+    ...(previous?.uri ? { uri: previous.uri } : {}),
+  };
+};

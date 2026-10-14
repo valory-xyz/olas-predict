@@ -81,7 +81,8 @@ const isPearlLookup = (value: unknown) =>
   isRecord(value) &&
   PEARL_STATUSES.includes(value.status) &&
   typeof value.checkedAt === 'number' &&
-  typeof value.failures === 'number';
+  typeof value.failures === 'number' &&
+  (value.uri === undefined || typeof value.uri === 'string');
 
 const isMechEntry = (value: unknown) =>
   isRecord(value) &&

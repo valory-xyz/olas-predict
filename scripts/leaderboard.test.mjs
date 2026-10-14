@@ -1,4 +1,4 @@
-/* global globalThis */
+/* global globalThis, Promise */
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
@@ -51,7 +51,11 @@ import { parseStoredPins } from '../utils/leaderboard/pins.ts';
 import { assignRanks, getNotRankedReason, searchByName } from '../utils/leaderboard/ranking.ts';
 import { isCronAuthorized } from '../utils/leaderboard/respond.ts';
 import { HttpStatusError, isTransientError, withRetry } from '../utils/leaderboard/retry.ts';
-import { fetchMechRequests } from '../utils/leaderboard/sources.ts';
+import {
+  fetchMechRequests,
+  mapWithConcurrency,
+  raceDeadline,
+} from '../utils/leaderboard/sources.ts';
 import { isValidBuilderState, isValidSnapshot } from '../utils/leaderboard/validate.ts';
 import { getAgentRecords, getLeaderboardPage } from '../utils/leaderboard/views.ts';
 
@@ -919,4 +923,60 @@ test('mech requests come from mech-analytics scored rows, paged by cursor and ch
         complete: false,
       }),
   );
+});
+
+test('a classified service is looked up again when its tokenURI changes', () => {
+  const t0 = 1_000_000;
+  const other = recordPearlLookup(undefined, 'other', t0, 'ipfs://a');
+  assert.deepEqual(other, { status: 'other', checkedAt: t0, failures: 0, uri: 'ipfs://a' });
+  assert.equal(needsPearlLookup(other, t0 + 1, 'ipfs://a'), false);
+  // tokenURI unread this run: keep the classification
+  assert.equal(needsPearlLookup(other, t0 + 1), false);
+  assert.equal(needsPearlLookup(other, t0 + 1, 'ipfs://b'), true);
+  // Stored before URIs were kept: classify once more
+  assert.equal(
+    needsPearlLookup({ status: 'pearl', checkedAt: t0, failures: 0 }, t0, 'ipfs://a'),
+    true,
+  );
+  // A failed re-check keeps the answer and the old URI, and is paced like any failed lookup
+  let lookup = other;
+  for (let run = 1; run <= PEARL_LOOKUP_MAX_FAILURES; run++) {
+    lookup = recordPearlLookup(lookup, null, t0 + run);
+  }
+  assert.deepEqual(lookup, {
+    status: 'other',
+    checkedAt: t0 + PEARL_LOOKUP_MAX_FAILURES,
+    failures: PEARL_LOOKUP_MAX_FAILURES,
+    uri: 'ipfs://a',
+  });
+  assert.equal(isPearlLookupPending(lookup), false);
+  assert.equal(needsPearlLookup(lookup, t0 + 10, 'ipfs://b'), false);
+  assert.equal(needsPearlLookup(lookup, t0 + PEARL_LOOKUP_RETRY_MS + 10, 'ipfs://b'), true);
+  const pearl = recordPearlLookup(lookup, 'pearl', t0 + 20, 'ipfs://b');
+  assert.deepEqual(pearl, { status: 'pearl', checkedAt: t0 + 20, failures: 0, uri: 'ipfs://b' });
+});
+
+test('mapWithConcurrency starts nothing after an error and waits for the calls in flight', async () => {
+  const started = [];
+  let finished = 0;
+  const run = mapWithConcurrency([1, 2, 3, 4, 5, 6], 2, async (item) => {
+    started.push(item);
+    await new Promise((resolve) => setTimeout(resolve, item === 1 ? 1 : 20));
+    if (item === 1) throw new Error('boom');
+    finished += 1;
+    return item;
+  });
+  await assert.rejects(run, /boom/);
+  // 1 and 2 were in flight; 2 finished before the rejection; nothing else started
+  assert.deepEqual(started, [1, 2]);
+  assert.equal(finished, 1);
+  assert.deepEqual(await mapWithConcurrency([3, 1, 2], 2, async (item) => item * 2), [6, 2, 4]);
+});
+
+test('raceDeadline gives up at the deadline', async () => {
+  const never = new Promise(() => {});
+  const started = Date.now();
+  assert.equal(await raceDeadline(never, Date.now() + 30), undefined);
+  assert.ok(Date.now() - started < 1000);
+  assert.equal(await raceDeadline(Promise.resolve(7), Date.now() + 1000), 7);
 });

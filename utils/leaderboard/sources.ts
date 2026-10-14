@@ -4,7 +4,7 @@
  */
 import { type Variables, request } from 'graphql-request';
 import { createPublicClient, formatUnits, http, parseAbi } from 'viem';
-import { polygon } from 'viem/chains';
+import { gnosis, polygon } from 'viem/chains';
 
 import {
   AGENTS,
@@ -20,7 +20,6 @@ import {
   SERVICE_REGISTRY_ADDRESSES,
   TOKEN_DECIMALS,
 } from 'constants/leaderboard';
-import { publicClient } from 'constants/viemConfig';
 
 import type { AgentDay } from './metrics';
 import { SECONDS_PER_DAY } from './metrics';
@@ -42,8 +41,6 @@ const PAGE_SIZE = 1000;
 const IN_FILTER_CHUNK = 500;
 const BRIER_SCALE = 1e18;
 const METADATA_FETCH_TIMEOUT_MS = 10_000;
-/** Services whose metadata is read per batch, between deadline checks */
-const SERVICE_METADATA_BATCH = 25;
 /**
  * Longest wait for one GraphQL response. Well inside the refresh route's save margin, so a
  * hung indexer cannot keep the function from saving its working state.
@@ -80,7 +77,11 @@ export const chunk = <T>(items: T[], size: number): T[][] => {
   return chunks;
 };
 
-/** Runs `fn` over `items` with at most `concurrency` calls in flight, keeping order */
+/**
+ * Runs `fn` over `items` with at most `concurrency` calls in flight, keeping order. After the
+ * first error no further item is started; the calls in flight are awaited (so none of them is
+ * still writing when this returns) and the first error is thrown.
+ */
 export const mapWithConcurrency = async <T, R>(
   items: T[],
   concurrency: number,
@@ -88,14 +89,38 @@ export const mapWithConcurrency = async <T, R>(
 ): Promise<R[]> => {
   const results: R[] = new Array(items.length);
   let next = 0;
+  const failures: unknown[] = [];
   const worker = async () => {
-    while (next < items.length) {
+    while (!failures.length && next < items.length) {
       const index = next++;
-      results[index] = await fn(items[index]);
+      try {
+        results[index] = await fn(items[index]);
+      } catch (error) {
+        failures.push(error);
+      }
     }
   };
   await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
+  if (failures.length) throw failures[0];
   return results;
+};
+
+/**
+ * `promise`'s value, or `undefined` once `deadline` (epoch ms) passes first. The promise is not
+ * cancelled; its result is ignored.
+ */
+export const raceDeadline = async <T>(promise: Promise<T>, deadline: number) => {
+  let timer: Parameters<typeof clearTimeout>[0];
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<undefined>((resolve) => {
+        timer = setTimeout(resolve, Math.max(deadline - Date.now(), 0));
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 };
 
 /** A token amount given as an integer string, in whole tokens */
@@ -293,14 +318,83 @@ export const fetchDailyStatistics = async (
 
 const tokenUriAbi = parseAbi(['function tokenURI(uint256 unitId) view returns (string)']);
 
-const publicClients = {
-  100: publicClient,
+/**
+ * The leaderboard's own server-side clients, apart from the app's `publicClient`: one retry and
+ * a 10 s timeout, so a hanging or rate-limiting RPC cannot hold a run past its deadline.
+ */
+const RPC_TRANSPORT_OPTIONS = { retryCount: 1, timeout: 10_000 };
+const leaderboardClients = {
+  100: createPublicClient({
+    chain: gnosis,
+    transport: http(
+      process.env.NEXT_PUBLIC_GNOSIS_URL ?? gnosis.rpcUrls.default.http[0],
+      RPC_TRANSPORT_OPTIONS,
+    ),
+  }),
   // viem's default Polygon RPC (polygon-rpc.com) now rejects unauthenticated calls
   137: createPublicClient({
     chain: polygon,
-    transport: http(process.env.POLYGON_RPC_URL || 'https://polygon-bor-rpc.publicnode.com'),
+    transport: http(
+      process.env.POLYGON_RPC_URL || 'https://polygon-bor-rpc.publicnode.com',
+      RPC_TRANSPORT_OPTIONS,
+    ),
   }),
 } as const;
+
+/** Services whose tokenURI is read per multicall */
+const TOKEN_URI_BATCH = 50;
+
+/**
+ * `ServiceRegistry.tokenURI` by service id, and the ids whose call failed. Each multicall is
+ * raced against `deadline` (epoch ms). A multicall that did not answer in time, threw, or
+ * failed for every id of its batch (`allowFailure` turns a failed RPC request into a failure
+ * per call) is an infrastructure failure: its ids are in neither result, so they are not held
+ * against the services.
+ */
+export const fetchTokenUris = async (
+  agentType: AgentType,
+  serviceIds: string[],
+  deadline: number,
+): Promise<{ uris: Map<string, string>; failed: string[] }> => {
+  const chainId = CHAIN_ID_BY_AGENT_TYPE[agentType] as keyof typeof leaderboardClients;
+  const client = leaderboardClients[chainId];
+  const uris = new Map<string, string>();
+  const failed: string[] = [];
+  await mapWithConcurrency(chunk(serviceIds, TOKEN_URI_BATCH), 4, async (ids) => {
+    if (Date.now() >= deadline) return;
+    let results;
+    try {
+      results = await raceDeadline(
+        client.multicall({
+          contracts: ids.map((id) => ({
+            address: SERVICE_REGISTRY_ADDRESSES[chainId],
+            abi: tokenUriAbi,
+            functionName: 'tokenURI' as const,
+            args: [BigInt(id)] as const,
+          })),
+          allowFailure: true,
+        }),
+        deadline,
+      );
+    } catch (error) {
+      console.error(`Leaderboard: tokenURI multicall failed for ${ids.length} services`, error);
+      return;
+    }
+    if (!results) return;
+    if (results.every(({ status }) => status !== 'success')) {
+      console.error(`Leaderboard: tokenURI unavailable for ${ids.length} services`, results[0]);
+      return;
+    }
+    results.forEach((result, index) => {
+      if (result.status === 'success') uris.set(ids[index], result.result);
+      else {
+        console.error(`Leaderboard: tokenURI of service ${ids[index]} unavailable`, result.error);
+        failed.push(ids[index]);
+      }
+    });
+  });
+  return { uris, failed };
+};
 
 const fetchJsonWithTimeout = async (url: string, timeoutMs: number): Promise<unknown> => {
   const response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
@@ -311,51 +405,38 @@ const fetchJsonWithTimeout = async (url: string, timeoutMs: number): Promise<unk
 const toGatewayUrl = (uri: string) =>
   uri.startsWith('ipfs://') ? `https://gateway.autonolas.tech/ipfs/${uri.slice(7)}` : uri;
 
+/** At least this many reads all failing in one run reads as a gateway outage */
+const METADATA_OUTAGE_MIN_READS = 3;
+
 /**
- * Service metadata (the JSON behind `ServiceRegistry.tokenURI`) by service id, and the ids
- * whose tokenURI or metadata could not be read. Stops at `deadline` (epoch ms): the services
- * not reached by then are in neither, and each metadata read is cut short at the deadline.
+ * Service metadata (the JSON behind each `[serviceId, tokenURI]`) by service id, and the ids
+ * whose metadata could not be read. Stops at `deadline` (epoch ms): the services not reached by
+ * then are in neither, and each read is cut short at the deadline. When every one of several
+ * reads failed, the gateway is taken to be down and `failed` is empty, so an outage does not
+ * count against every service.
  */
 export const fetchServiceMetadata = async (
-  agentType: AgentType,
-  serviceIds: string[],
+  services: [string, string][],
   deadline: number,
 ): Promise<{ metadata: Map<string, unknown>; failed: string[] }> => {
-  const chainId = CHAIN_ID_BY_AGENT_TYPE[agentType] as keyof typeof publicClients;
-  const client = publicClients[chainId];
   const metadata = new Map<string, unknown>();
   const failed: string[] = [];
-
-  for (const ids of chunk(serviceIds, SERVICE_METADATA_BATCH)) {
-    if (Date.now() >= deadline) break;
-    const uris = await client.multicall({
-      contracts: ids.map((id) => ({
-        address: SERVICE_REGISTRY_ADDRESSES[chainId],
-        abi: tokenUriAbi,
-        functionName: 'tokenURI' as const,
-        args: [BigInt(id)] as const,
-      })),
-      allowFailure: true,
-    });
-    await mapWithConcurrency(ids, 10, async (id) => {
-      const uri = uris[ids.indexOf(id)];
-      if (uri.status !== 'success') {
-        console.error(`Leaderboard: tokenURI of service ${id} unavailable`, uri.error);
-        failed.push(id);
-        return;
-      }
-      const timeoutMs = Math.min(METADATA_FETCH_TIMEOUT_MS, deadline - Date.now());
-      // Out of time: not attempted, so not a failure
-      if (timeoutMs <= 0) return;
-      try {
-        metadata.set(id, await fetchJsonWithTimeout(toGatewayUrl(uri.result), timeoutMs));
-      } catch (error) {
-        // Cut short by the deadline rather than the full timeout: not a failure either
-        if (timeoutMs < METADATA_FETCH_TIMEOUT_MS && Date.now() >= deadline) return;
-        console.error(`Leaderboard: metadata of service ${id} unavailable`, error);
-        failed.push(id);
-      }
-    });
+  await mapWithConcurrency(services, 10, async ([id, uri]) => {
+    const timeoutMs = Math.min(METADATA_FETCH_TIMEOUT_MS, deadline - Date.now());
+    // Out of time: not attempted, so not a failure
+    if (timeoutMs <= 0) return;
+    try {
+      metadata.set(id, await fetchJsonWithTimeout(toGatewayUrl(uri), timeoutMs));
+    } catch (error) {
+      // Cut short by the deadline rather than the full timeout: not a failure either
+      if (timeoutMs < METADATA_FETCH_TIMEOUT_MS && Date.now() >= deadline) return;
+      console.error(`Leaderboard: metadata of service ${id} unavailable`, error);
+      failed.push(id);
+    }
+  });
+  if (!metadata.size && failed.length >= METADATA_OUTAGE_MIN_READS) {
+    console.error(`Leaderboard: all ${failed.length} metadata reads failed, gateway down?`);
+    return { metadata, failed: [] };
   }
   return { metadata, failed };
 };
