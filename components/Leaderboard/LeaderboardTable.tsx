@@ -105,7 +105,7 @@ export type PinnedRow = LeaderboardRow & { flash?: boolean };
 /** A row rendered with the one-line not-ranked reason (sticky pinned rows on a phone) */
 type CompactRow = LeaderboardRow & { isCompact?: boolean };
 
-/** Volume and Avg trade size are never negative; a signed figure passes its absolute value */
+/** A dollar amount; a signed figure (PnL) passes its absolute value and `Signed` adds the sign */
 const formatUsd = (value: number) =>
   `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
