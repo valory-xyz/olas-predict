@@ -549,9 +549,17 @@ export const fetchMechRequests = async (
       const { id, ...record } = request;
       byId.set(id, record);
     });
+    // A page of nothing but malformed rows is a changed format, not a page without requests
+    if (malformed && malformed === body.rows.length) {
+      throw new Error(`All ${malformed} mech-analytics rows malformed for ${url}`);
+    }
     // Like the trader, which dates such a row to the epoch, far outside every window
     if (malformed) console.error(`Leaderboard: ${malformed} mech-analytics rows skipped (${url})`);
-    cursor = typeof body.next_cursor === 'string' && body.next_cursor ? body.next_cursor : null;
+    const { next_cursor: nextCursor } = body;
+    if (nextCursor !== undefined && nextCursor !== null && typeof nextCursor !== 'string') {
+      throw new Error(`Unexpected mech-analytics next_cursor for ${url}`);
+    }
+    cursor = nextCursor || null;
     if (!cursor) return result(true);
   }
   throw new Error(

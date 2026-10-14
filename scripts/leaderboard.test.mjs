@@ -1009,6 +1009,16 @@ test('mech requests come from mech-analytics scored rows, paged by cursor and ch
     () => ({ body: { detail: 'proxy error' } }),
     () => assert.rejects(fetchMechRequests('omenstrat', '0xabc', 0, Date.now() + 60_000)),
   );
+  // A page of only malformed rows, or a cursor that is not a string, is an unexpected answer
+  await withFetch(
+    () => ({ body: { rows: [{ request_id: 1, requested_at: 'x' }], next_cursor: null } }),
+    () =>
+      assert.rejects(fetchMechRequests('omenstrat', '0xabc', 0, Date.now() + 60_000), /malformed/),
+  );
+  await withFetch(
+    () => ({ body: { rows: [scoredRow(1, '2026-10-01T10:00:00Z')], next_cursor: 5 } }),
+    () => assert.rejects(fetchMechRequests('omenstrat', '0xabc', 0, Date.now() + 60_000), /cursor/),
+  );
   // Past the deadline: nothing fetched, incomplete
   await withFetch(
     () => assert.fail('no request expected'),
