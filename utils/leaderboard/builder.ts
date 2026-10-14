@@ -23,6 +23,7 @@ import {
   recordPearlLookup,
 } from './pearl';
 import { needsMarketCheck, recordMarketMiss, recordMarketWait } from './pending';
+import { PopulationDropError, checkPopulation } from './population';
 import type { BuilderState } from './snapshot';
 import {
   DeadlineError,
@@ -347,6 +348,25 @@ export const buildLeaderboard = async (
     ({ serviceId }) => state.pearl[serviceId]?.status === 'pearl',
   );
   const pearlAddresses = pearlAgents.map(({ address }) => address);
+
+  // Before anything is pruned or published: a source that suddenly answers with far fewer
+  // agents, or from an older block, is more likely partial than right
+  const populationCheck = checkPopulation(state.population, {
+    sourceHeight: population.sourceHeight,
+    activeAgents: activeAgents.length,
+    pearlAgents: pearlAgents.length,
+  });
+  state.population = populationCheck.record;
+  if (populationCheck.refusal) {
+    throw new PopulationDropError(
+      `${agentType} sources look partial (${populationCheck.refusal}): nothing pruned or published`,
+    );
+  }
+  if (populationCheck.accepted) {
+    console.error(
+      `Leaderboard: ${agentType} accepted after repeated runs: ${populationCheck.accepted}`,
+    );
+  }
 
   const marketsByAgent = new Map(
     pearlAddresses.map((address) => [

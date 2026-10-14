@@ -84,6 +84,13 @@ const isPearlLookup = (value: unknown) =>
   typeof value.failures === 'number' &&
   (value.uri === undefined || typeof value.uri === 'string');
 
+const isPopulationRecord = (value: unknown) =>
+  isRecord(value) &&
+  isNullableNumber(value.sourceHeight) &&
+  typeof value.activeAgents === 'number' &&
+  typeof value.pearlAgents === 'number' &&
+  typeof value.suspectRuns === 'number';
+
 const isMechEntry = (value: unknown) =>
   isRecord(value) &&
   typeof value.syncedTo === 'number' &&
@@ -108,4 +115,5 @@ export const isValidBuilderState = (data: unknown): data is BuilderState =>
   isRecordOf(data.tallies, (tallies) => isRecordOf(tallies, (tally) => isNumberTuple(tally, 4))) &&
   isRecordOf(data.titles, (title) => typeof title === 'string') &&
   (data.pendingMarkets === undefined ||
-    isRecordOf(data.pendingMarkets, (check) => isNumberTuple(check, 2)));
+    isRecordOf(data.pendingMarkets, (check) => isNumberTuple(check, 2))) &&
+  (data.population === undefined || isPopulationRecord(data.population));

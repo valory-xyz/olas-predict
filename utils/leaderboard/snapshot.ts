@@ -12,6 +12,7 @@ import type { LeaderboardSnapshot } from 'types/leaderboard';
 import type { MarketTallies } from './metrics';
 import type { PearlLookup } from './pearl';
 import type { PendingMarketCheck } from './pending';
+import type { PopulationRecord } from './population';
 import { isRecord, isValidBuilderState, isValidSnapshot } from './validate';
 
 /** How long a warm function trusts its in-memory snapshot before checking Blob again */
@@ -41,6 +42,8 @@ export type BuilderState = {
    * lookups in a row missed (see `pending.ts`). Absent in states saved before it existed.
    */
   pendingMarkets?: Record<string, PendingMarketCheck>;
+  /** What the last accepted run's sources held (see `population.ts`); absent before it existed */
+  population?: PopulationRecord;
 };
 
 export const createEmptyState = (): BuilderState => ({

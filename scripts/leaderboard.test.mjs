@@ -49,6 +49,10 @@ import {
   recordMarketWait,
 } from '../utils/leaderboard/pending.ts';
 import { parseStoredPins } from '../utils/leaderboard/pins.ts';
+import {
+  ACCEPT_POPULATION_DROP_AFTER_RUNS,
+  checkPopulation,
+} from '../utils/leaderboard/population.ts';
 import { assignRanks, getNotRankedReason, searchByName } from '../utils/leaderboard/ranking.ts';
 import { isCronAuthorized } from '../utils/leaderboard/respond.ts';
 import { HttpStatusError, isTransientError, withRetry } from '../utils/leaderboard/retry.ts';
@@ -995,4 +999,36 @@ test('a market waiting for its finalization is due then, without a miss', () => 
   assert.equal(check[1], 0);
   // A miss after that backs off from the first step
   assert.deepEqual(recordMarketMiss(check, 25 * HOUR), [26 * HOUR, 1]);
+});
+
+test('a run whose sources shrank or went back is refused, then accepted if it lasts', () => {
+  const previous = { sourceHeight: 1000, activeAgents: 500, pearlAgents: 100, suspectRuns: 0 };
+  const same = { sourceHeight: 1100, activeAgents: 480, pearlAgents: 95 };
+  assert.deepEqual(checkPopulation(previous, same), {
+    record: { ...same, suspectRuns: 0 },
+    refusal: null,
+    accepted: null,
+  });
+  // Nothing to compare with
+  assert.equal(checkPopulation(undefined, { ...same, activeAgents: 0 }).refusal, null);
+  // A reorg's worth of blocks back is fine; more is not
+  assert.equal(checkPopulation(previous, { ...same, sourceHeight: 950 }).refusal, null);
+  assert.match(checkPopulation(previous, { ...same, sourceHeight: 800 }).refusal, /height/);
+  assert.match(checkPopulation(previous, { ...same, activeAgents: 1 }).refusal, /active agents/);
+  assert.match(checkPopulation(previous, { ...same, pearlAgents: 0 }).refusal, /Pearl agents/);
+
+  // A lasting drop is accepted on the last of ACCEPT_POPULATION_DROP_AFTER_RUNS runs
+  const shrunk = { sourceHeight: 1200, activeAgents: 100, pearlAgents: 20 };
+  let record = previous;
+  for (let run = 1; run < ACCEPT_POPULATION_DROP_AFTER_RUNS; run++) {
+    const result = checkPopulation(record, shrunk);
+    assert.ok(result.refusal);
+    // The baseline stays the last accepted run
+    assert.equal(result.record.activeAgents, 500);
+    record = result.record;
+  }
+  const last = checkPopulation(record, shrunk);
+  assert.equal(last.refusal, null);
+  assert.ok(last.accepted);
+  assert.deepEqual(last.record, { ...shrunk, suspectRuns: 0 });
 });
