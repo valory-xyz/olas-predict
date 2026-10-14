@@ -64,7 +64,7 @@ Runtime-only secrets (not in `.env.example`, configured in the Vercel dashboard)
 The app uses Next.js Pages Router. Top-level routes:
 - `/questions` - Lists prediction market questions with filters (all/opened/closed)
 - `/agents` - Three sections: trader agents, creator agents, mech agents
-- `/leaderboard` - Pearl trader agents (Omenstrat/Polystrat) ranked by ROI or PnL over 7D/30D/90D/1Y, with name search, pins kept in `localStorage` (`PINNED_AGENTS_STORAGE_KEY`) and the `?pin=` deep link from the Pearl Agent Profile. State lives in the URL query (`agentType`, `rankBy`, `window`). Only this page widens the content column (up to 1200px, kept clear of the fixed menu) and, below the `xl` breakpoint, makes the layout root clip instead of scroll so its sticky header and pinned rows work (see `components/Layout/index.tsx`)
+- `/leaderboard` - Pearl trader agents (Omenstrat/Polystrat) ranked by ROI or PnL over 7D/30D/90D/1Y, with name search, pins kept in `localStorage` (`PINNED_AGENTS_STORAGE_KEY`) and the `?pin=` deep link from the Pearl Agent Profile. State lives in the URL query (`agentType`, `rankBy`, `window`). Only this page replaces the side menu with `TopMenu` on desktop, widens the content column to 1200px, and makes the layout root clip instead of scroll at every width (the background sits on a fixed `::before` layer), so its sticky header and pinned rows work (see `components/Layout/index.tsx`)
 - Root `/` redirects to `/questions?state=opened` (configured in `next.config.js`, no `pages/index.tsx`)
 
 Dynamic routes:
