@@ -46,6 +46,7 @@ import {
   PENDING_MARKET_MAX_RECHECK_MS,
   needsMarketCheck,
   recordMarketMiss,
+  recordMarketWait,
 } from '../utils/leaderboard/pending.ts';
 import { parseStoredPins } from '../utils/leaderboard/pins.ts';
 import { assignRanks, getNotRankedReason, searchByName } from '../utils/leaderboard/ranking.ts';
@@ -706,7 +707,7 @@ test('a market left untallied is looked up again with a doubling wait, up to a d
   const HOUR = 3600_000;
   assert.equal(needsMarketCheck(undefined, 0), true);
   let check = recordMarketMiss(undefined, 0);
-  assert.deepEqual(check, [0, 1]);
+  assert.deepEqual(check, [HOUR, 1]);
   // The next hourly run, even if it starts a little early
   assert.equal(needsMarketCheck(check, HOUR - 60_000), true);
   assert.equal(needsMarketCheck(check, HOUR / 2), false);
@@ -979,4 +980,19 @@ test('raceDeadline gives up at the deadline', async () => {
   assert.equal(await raceDeadline(never, Date.now() + 30), undefined);
   assert.ok(Date.now() - started < 1000);
   assert.equal(await raceDeadline(Promise.resolve(7), Date.now() + 1000), 7);
+});
+
+test('a market waiting for its finalization is due then, without a miss', () => {
+  const HOUR = 3_600_000;
+  const finalizesAt = 24 * HOUR + HOUR / 2;
+  let check = recordMarketWait(undefined, finalizesAt);
+  assert.deepEqual(check, [finalizesAt, 0]);
+  // Not looked up again before; the first hourly run after finalization is due
+  assert.equal(needsMarketCheck(check, 12 * HOUR), false);
+  assert.equal(needsMarketCheck(check, 25 * HOUR), true);
+  // Rechecked a little early: wait again, still no miss
+  check = recordMarketWait(check, finalizesAt);
+  assert.equal(check[1], 0);
+  // A miss after that backs off from the first step
+  assert.deepEqual(recordMarketMiss(check, 25 * HOUR), [26 * HOUR, 1]);
 });

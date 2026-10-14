@@ -37,8 +37,8 @@ export type BuilderState = {
   /** Polymarket question id -> title key (Omen titles come with the daily statistics) */
   titles: Record<string, string>;
   /**
-   * Settled markets not tallied yet, by market id: when they were last looked up and how many
-   * lookups in a row left them untallied. Absent in states saved before it existed.
+   * Settled markets not tallied yet, by market id: when the next lookup is due and how many
+   * lookups in a row missed (see `pending.ts`). Absent in states saved before it existed.
    */
   pendingMarkets?: Record<string, PendingMarketCheck>;
 };

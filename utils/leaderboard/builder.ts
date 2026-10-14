@@ -22,7 +22,7 @@ import {
   needsPearlLookup,
   recordPearlLookup,
 } from './pearl';
-import { needsMarketCheck, recordMarketMiss } from './pending';
+import { needsMarketCheck, recordMarketMiss, recordMarketWait } from './pending';
 import type { BuilderState } from './snapshot';
 import {
   DeadlineError,
@@ -142,8 +142,8 @@ const updateMechRequests = async (
 
 /**
  * Tallies the agents' bets on markets that now have a final answer and were not tallied yet.
- * Markets left untallied (no final answer yet, or no bets returned) are looked up again with
- * a growing interval (see `needsMarketCheck`). `prefetched` holds Polymarket questions this run
+ * Markets left untallied are looked up again when due (see `pending.ts`): an Omen market that
+ * only waits out its answer timeout at its finalization time, any other with a growing interval. `prefetched` holds Polymarket questions this run
  * already read, which are scored without another lookup. `false` when time ran out.
  */
 const updateTallies = async (
@@ -172,6 +172,8 @@ const updateTallies = async (
 
   // Which pending markets have a final answer, and how to score a bet on each of them
   let scoreMarket: (marketId: string, outcomeIndexes: number[]) => [number, number] | null;
+  // When a market that is not final yet will be, if that is known (epoch ms)
+  let finalizesAt: (marketId: string) => number | null = () => null;
   let checked: string[];
   if (agentType === AGENTS.OMENSTRAT) {
     const { found: answers, checked: checkedMarkets } = await fetchOmenMarketAnswers(
@@ -188,6 +190,16 @@ const updateTallies = async (
         nowSeconds,
         invalidAnswerHex: INVALID_ANSWER_HEX,
       });
+    };
+    finalizesAt = (marketId) => {
+      const answer = answers.get(marketId);
+      return answer &&
+        answer.currentAnswer !== null &&
+        !answer.isPendingArbitration &&
+        answer.answerFinalizedTimestamp !== null &&
+        answer.answerFinalizedTimestamp > nowSeconds
+        ? answer.answerFinalizedTimestamp * 1000
+        : null;
     };
   } else {
     const fetched = await fetchPolymarketQuestions(
@@ -239,8 +251,15 @@ const updateTallies = async (
     },
   );
   checked.forEach((marketId) => {
-    if (missed.has(marketId)) checks[marketId] = recordMarketMiss(checks[marketId], now);
-    else delete checks[marketId];
+    if (!missed.has(marketId)) {
+      delete checks[marketId];
+      return;
+    }
+    const waitUntil = finalizesAt(marketId);
+    checks[marketId] =
+      waitUntil === null
+        ? recordMarketMiss(checks[marketId], now)
+        : recordMarketWait(checks[marketId], waitUntil);
   });
   return checked.length === pendingMarkets.length && done.every(Boolean);
 };
