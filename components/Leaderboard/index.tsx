@@ -1,5 +1,5 @@
 import { CheckCircleFilled } from '@ant-design/icons';
-import { Flex, Typography, message } from 'antd';
+import { Button, Flex, Typography, message } from 'antd';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import styled from 'styled-components';
 
@@ -205,11 +205,16 @@ export const Leaderboard = ({
       />
       <LeaderboardCard type="ongoing">
         {hasListFailed ? (
-          <Text type="secondary" className="text-center">
-            {isUnavailable
-              ? 'Leaderboard data is not available yet. Please check back later.'
-              : 'Something went wrong while loading the leaderboard. Please try again.'}
-          </Text>
+          <Flex vertical align="center" gap={16}>
+            <Text type="secondary" className="text-center">
+              {isUnavailable
+                ? 'Leaderboard data is not available yet. Please check back later.'
+                : 'Something went wrong while loading the leaderboard. Please try again.'}
+            </Text>
+            <Button loading={list.isFetching} onClick={() => list.refetch()}>
+              Try again
+            </Button>
+          </Flex>
         ) : (
           <>
             {/* The design has no count above the table; while searching, say how many match */}

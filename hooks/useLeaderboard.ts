@@ -111,7 +111,8 @@ export const useLeaderboard = ({
     },
     retry: shouldRetryLeaderboard,
     staleTime: LIST_STALE_TIME_MS,
-    refetchOnWindowFocus: false,
+    // A loaded list stays put on focus; a list that failed to load tries again
+    refetchOnWindowFocus: (query) => !query.state.data,
   });
 
   const { error, data, isFetchNextPageError } = query;
