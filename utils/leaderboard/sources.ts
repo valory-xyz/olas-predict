@@ -405,36 +405,57 @@ const fetchJsonWithTimeout = async (url: string, timeoutMs: number): Promise<unk
 const toGatewayUrl = (uri: string) =>
   uri.startsWith('ipfs://') ? `https://gateway.autonolas.tech/ipfs/${uri.slice(7)}` : uri;
 
-/** At least this many reads all failing in one run reads as a gateway outage */
+/** At least this many reads all failing in one run may be a gateway outage */
 const METADATA_OUTAGE_MIN_READS = 3;
 
 /**
  * Service metadata (the JSON behind each `[serviceId, tokenURI]`) by service id, and the ids
  * whose metadata could not be read. Stops at `deadline` (epoch ms): the services not reached by
- * then are in neither, and each read is cut short at the deadline. When every one of several
- * reads failed, the gateway is taken to be down and `failed` is empty, so an outage does not
- * count against every service.
+ * then are in neither, and each read is cut short at the deadline.
+ *
+ * When every one of several reads failed, `probeUris` (metadata that was read before, e.g. of
+ * classified services) tell an outage from URIs the gateway cannot serve: if none of them
+ * reads either, the gateway is taken to be down and `failed` is empty, so an outage does not
+ * count against every service; if one does, the failures count, so a few unservable URIs
+ * cannot hold the snapshot back forever.
  */
 export const fetchServiceMetadata = async (
   services: [string, string][],
   deadline: number,
+  probeUris: string[] = [],
 ): Promise<{ metadata: Map<string, unknown>; failed: string[] }> => {
   const metadata = new Map<string, unknown>();
   const failed: string[] = [];
-  await mapWithConcurrency(services, 10, async ([id, uri]) => {
+  const read = async (uri: string) => {
     const timeoutMs = Math.min(METADATA_FETCH_TIMEOUT_MS, deadline - Date.now());
-    // Out of time: not attempted, so not a failure
-    if (timeoutMs <= 0) return;
+    // Out of time: not attempted
+    if (timeoutMs <= 0) return 'skipped';
     try {
-      metadata.set(id, await fetchJsonWithTimeout(toGatewayUrl(uri), timeoutMs));
+      return { value: await fetchJsonWithTimeout(toGatewayUrl(uri), timeoutMs) };
     } catch (error) {
       // Cut short by the deadline rather than the full timeout: not a failure either
-      if (timeoutMs < METADATA_FETCH_TIMEOUT_MS && Date.now() >= deadline) return;
-      console.error(`Leaderboard: metadata of service ${id} unavailable`, error);
-      failed.push(id);
+      if (timeoutMs < METADATA_FETCH_TIMEOUT_MS && Date.now() >= deadline) return 'skipped';
+      return { error };
     }
+  };
+  await mapWithConcurrency(services, 10, async ([id, uri]) => {
+    const result = await read(uri);
+    if (result === 'skipped') return;
+    if ('value' in result) {
+      metadata.set(id, result.value);
+      return;
+    }
+    console.error(`Leaderboard: metadata of service ${id} unavailable`, result.error);
+    failed.push(id);
   });
   if (!metadata.size && failed.length >= METADATA_OUTAGE_MIN_READS) {
+    for (const uri of probeUris) {
+      const result = await read(uri);
+      if (result !== 'skipped' && 'value' in result) {
+        console.error(`Leaderboard: all ${failed.length} metadata reads failed, gateway is up`);
+        return { metadata, failed };
+      }
+    }
     console.error(`Leaderboard: all ${failed.length} metadata reads failed, gateway down?`);
     return { metadata, failed: [] };
   }

@@ -84,6 +84,7 @@ globalThis.fetch = async (input) => {
 
 const { buildLeaderboard } = await import('../utils/leaderboard/builder.ts');
 const { PopulationDropError } = await import('../utils/leaderboard/population.ts');
+const { PEARL_LOOKUP_MAX_FAILURES } = await import('../utils/leaderboard/pearl.ts');
 const snapshotModule = await import('../utils/leaderboard/snapshot.ts');
 const { createEmptyState, readBuilderState, readSnapshot, resetSnapshotMemo, BlobReadError } =
   snapshotModule;
@@ -279,6 +280,53 @@ test('an unavailable mech source holds the snapshot back and keeps the stored re
   assert.equal(snapshot, null);
   assert.deepEqual(state.mech[A], stored);
   void world;
+});
+
+test('services whose metadata the gateway cannot serve are given up on while it is up', async () => {
+  const world = polystratWorld();
+  const state = createEmptyState();
+  await buildLeaderboard('polystrat', state, FAR());
+  // Three new services whose URIs the gateway cannot serve, and real metadata reads
+  const extra = [
+    [`0x${'d'.repeat(40)}`, '4'],
+    [`0x${'e'.repeat(40)}`, '5'],
+    [`0x${'f'.repeat(40)}`, '6'],
+  ];
+  extra.forEach(([address, serviceId]) => {
+    world.agents.push({ address, serviceId });
+    world.uris[serviceId] = `ipfs://bad${serviceId}`;
+    world.daysByAgent.set(address, [day(today(), ['q4'])]);
+  });
+  sources.fetchServiceMetadata = realSources.fetchServiceMetadata;
+  let isGatewayUp = false;
+  fetchOverride = (url) => {
+    if (url.host !== 'gateway.autonolas.tech') return null;
+    const cid = url.pathname.split('/').pop();
+    const body = isGatewayUp ? world.metadataByUri[`ipfs://${cid}`] : undefined;
+    return body ? Response.json(body) : new Response('no', { status: isGatewayUp ? 404 : 502 });
+  };
+  try {
+    // Gateway down (the probes of known metadata fail too): no strikes, the snapshot waits
+    for (let run = 0; run < PEARL_LOOKUP_MAX_FAILURES + 1; run++) {
+      const { snapshot } = await buildLeaderboard('polystrat', state, FAR());
+      assert.equal(snapshot, null);
+    }
+    assert.equal(state.pearl['4'], undefined);
+    // Gateway up but the three URIs unservable: strikes count, then the board publishes
+    isGatewayUp = true;
+    let result;
+    for (let run = 0; run < PEARL_LOOKUP_MAX_FAILURES; run++) {
+      result = await buildLeaderboard('polystrat', state, FAR());
+      assert.equal(result.snapshot === null, run < PEARL_LOOKUP_MAX_FAILURES - 1);
+    }
+    assert.deepEqual(result.unresolvedServices, ['4', '5', '6']);
+    assert.deepEqual(
+      result.snapshot.agents.map(({ address }) => address),
+      [A, B],
+    );
+  } finally {
+    fetchOverride = null;
+  }
 });
 
 test('a run whose sources shrank prunes and publishes nothing', async () => {

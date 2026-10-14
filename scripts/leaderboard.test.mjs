@@ -59,6 +59,7 @@ import { isCronAuthorized } from '../utils/leaderboard/respond.ts';
 import { HttpStatusError, isTransientError, withRetry } from '../utils/leaderboard/retry.ts';
 import {
   fetchMechRequests,
+  fetchServiceMetadata,
   mapWithConcurrency,
   raceDeadline,
 } from '../utils/leaderboard/sources.ts';
@@ -1017,6 +1018,28 @@ test('mech requests come from mech-analytics scored rows, paged by cursor and ch
         complete: false,
       }),
   );
+});
+
+test('metadata reads that all fail count only when a known-good probe reads', async () => {
+  const bad = [
+    ['1', 'ipfs://bad1'],
+    ['2', 'ipfs://bad2'],
+    ['3', 'ipfs://bad3'],
+  ];
+  const serve = (good) => (url) =>
+    url.pathname.endsWith('/good') && good ? { body: { name: 'n' } } : { status: 404, body: {} };
+  // No probe, or the probe fails too: an outage, nothing counted
+  await withFetch(serve(false), async () => {
+    assert.deepEqual((await fetchServiceMetadata(bad, Date.now() + 60_000)).failed, []);
+    const probed = await fetchServiceMetadata(bad, Date.now() + 60_000, ['ipfs://good']);
+    assert.deepEqual(probed.failed, []);
+  });
+  // The probe reads: the gateway is up, so the failures count
+  await withFetch(serve(true), async (urls) => {
+    const { failed } = await fetchServiceMetadata(bad, Date.now() + 60_000, ['ipfs://good']);
+    assert.deepEqual(failed.sort(), ['1', '2', '3']);
+    assert.equal(urls.at(-1).href, 'https://gateway.autonolas.tech/ipfs/good');
+  });
 });
 
 test('a classified service is looked up again when its tokenURI changes', () => {

@@ -44,6 +44,8 @@ import {
 /** Mech requests are kept from this long before the longest window, for markets open then */
 const MECH_LOOKBACK_SECONDS = 30 * SECONDS_PER_DAY;
 const AGENT_CONCURRENCY = 8;
+/** Known-good metadata URIs read when every lookup of a run failed (see `fetchServiceMetadata`) */
+const METADATA_PROBES = 3;
 /** How far back each run re-reads an agent's mech requests (see `updateMechRequests`) */
 export const MECH_REFETCH_OVERLAP_SECONDS = SECONDS_PER_DAY;
 
@@ -63,7 +65,8 @@ const isPastDeadline = (deadline: number) => Date.now() >= deadline;
  * services and of those whose URI changed. `false` while a service's flag is still pending,
  * i.e. a lookup failed fewer than `PEARL_LOOKUP_MAX_FAILURES` runs in a row or was not made
  * (time ran out, RPC or gateway down), so the snapshot waits rather than leave a Pearl agent
- * out. Infrastructure failures do not count as failed lookups.
+ * out. Infrastructure failures do not count as failed lookups; a run whose metadata reads all
+ * failed tells them apart by reading metadata that was read before.
  */
 const updatePearlFlags = async (
   agentType: AgentType,
@@ -76,9 +79,16 @@ const updatePearlFlags = async (
   const toLookUp = serviceIds.filter(
     (id) => uris.has(id) && needsPearlLookup(state.pearl[id], now, uris.get(id)),
   );
+  // Metadata read before, newest first: if all of it fails too, the gateway is down
+  const probeUris = Object.values(state.pearl)
+    .filter(({ status, uri }) => (status === 'pearl' || status === 'other') && uri)
+    .sort((a, b) => b.checkedAt - a.checkedAt)
+    .slice(0, METADATA_PROBES)
+    .map(({ uri }) => uri as string);
   const { metadata, failed } = await fetchServiceMetadata(
     toLookUp.map((id) => [id, uris.get(id) as string]),
     deadline,
+    probeUris,
   );
   metadata.forEach((value, id) => {
     state.pearl[id] = recordPearlLookup(
