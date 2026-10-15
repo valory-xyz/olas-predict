@@ -129,7 +129,7 @@ When adding a new dependency, check:
 **Olas-predict-specific watches:**
 
 - [`@vercel/blob`](https://www.npmjs.com/package/@vercel/blob) is what actually reads `BLOB_READ_WRITE_TOKEN` at runtime (see [§7](#7-secrets-hygiene-in-the-build-environment)). A compromised version could exfiltrate the token. Pin tightly and do not skip review on its transitive bumps.
-- [`viem`](https://www.npmjs.com/package/viem) — EVM client library. This app uses it **read-only** (`publicClient.readContract`, `publicClient.getLogs` in `components/MechAgents.tsx`) — no wallet connectors, no signing — so the blast radius of a compromised version is narrower than in a dapp that signs transactions. Wagmi was removed (see §5a worked example 2); do NOT add `wagmi` / `@wagmi/core` back to the deps without reading that section first.
+- [`viem`](https://www.npmjs.com/package/viem) — EVM client library. This app uses it **read-only** (`publicClient.readContract`, `publicClient.getLogs` in `components/MechAgents.tsx` in the browser; server-side, `multicall` reads of `ServiceRegistry.tokenURI` through the leaderboard's own Gnosis and Polygon clients in `utils/leaderboard/sources.ts`) — no wallet connectors, no signing — so the blast radius of a compromised version is narrower than in a dapp that signs transactions. Wagmi was removed (see §5a worked example 2); do NOT add `wagmi` / `@wagmi/core` back to the deps without reading that section first.
 - [`graphql-request`](https://www.npmjs.com/package/graphql-request) is on the hot path for every page render (subgraph fetches). A compromised version could redirect requests off our subgraph endpoints.
 
 ### 6a. Install-hook diff gate
@@ -164,7 +164,9 @@ The runtime and build environments for `olas-predict-app` hold a deliberately sm
 
 | Name | Purpose | Scope | Where read |
 | --- | --- | --- | --- |
-| `BLOB_READ_WRITE_TOKEN` | Vercel Blob read access for cached achievement lookup files | Runtime (server-only, SSR) | Implicitly by `@vercel/blob` SDK — see [`utils/achievements.ts`](./utils/achievements.ts), invoked from `getServerSideProps` in [`pages/[agent]/achievement/index.tsx`](./pages/[agent]/achievement/index.tsx) |
+| `BLOB_READ_WRITE_TOKEN` | Vercel Blob, store-wide read and write. Read: cached achievement lookup files and the leaderboard snapshots and builder state. Write: the leaderboard refresh writes `leaderboard/<type>/snapshot.json` and `builder-state.json`. A holder can overwrite the public snapshot that the Pearl trader agent consumes for its Agent Profile rank (through `/api/leaderboard/agents`), so treat a leak as an integrity incident, not only a confidentiality one | Runtime (server-only: SSR and API routes) | Implicitly by `@vercel/blob` SDK — see [`utils/achievements.ts`](./utils/achievements.ts), invoked from `getServerSideProps` in [`pages/[agent]/achievement/index.tsx`](./pages/[agent]/achievement/index.tsx), and [`utils/leaderboard/snapshot.ts`](./utils/leaderboard/snapshot.ts), invoked from [`pages/api/leaderboard/`](./pages/api/leaderboard/) |
+| `CRON_SECRET` | Bearer secret Vercel Cron sends to `/api/leaderboard/refresh`; anyone holding it can trigger leaderboard rebuilds (and with them Blob writes and source traffic) | Runtime (server-only) | [`pages/api/leaderboard/refresh.ts`](./pages/api/leaderboard/refresh.ts) via `isCronAuthorized` in [`utils/leaderboard/respond.ts`](./utils/leaderboard/respond.ts) |
+| `POLYGON_RPC_URL` (optional) | Polygon RPC for the leaderboard's `ServiceRegistry.tokenURI` reads; a provider URL usually embeds an API key. Defaults to a public endpoint | Runtime (server-only) | [`utils/leaderboard/sources.ts`](./utils/leaderboard/sources.ts) |
 
 Everything else read by the app is `NEXT_PUBLIC_*` configuration that Next.js inlines into the client bundle:
 
@@ -175,6 +177,8 @@ Everything else read by the app is `NEXT_PUBLIC_*` configuration that Next.js in
 | `NEXT_PUBLIC_REGISTRY_GRAPH_URL` | [`utils/registry.ts`](./utils/registry.ts) — registry subgraph |
 | `NEXT_PUBLIC_PREDICT_POLYMARKET_SQUID_URL` | [`constants/index.ts`](./constants/index.ts) — Polymarket SQD squid for Polystrat achievements |
 | `NEXT_PUBLIC_SKIP_LEGACY_ACHIEVEMENTS` | [`utils/achievements.ts`](./utils/achievements.ts) — feature flag |
+
+Non-secret server-side configuration: `MECH_ANALYTICS_URL` (optional) overrides the public mech-analytics base URL the leaderboard builder reads mech requests from ([`utils/leaderboard/sources.ts`](./utils/leaderboard/sources.ts); default `MECH_ANALYTICS_DEFAULT_URL` in [`constants/leaderboard.ts`](./constants/leaderboard.ts)). It is not a secret, but pointing it elsewhere changes every Pearl agent's mech fees, so treat it like code.
 
 `NEXT_PUBLIC_*` values are visible to anyone who loads the site. **`NEXT_PUBLIC_SUBGRAPH_API_KEY` and `NEXT_PUBLIC_GNOSIS_URL` are sensitive even though they are public**: the subgraph API key is bundled and can be extracted from the JS, and the RPC URL typically embeds an API key in the URL. Treat them as low-rotation public configuration, but rotate them when an install-time compromise is suspected because a postinstall could exfiltrate them at build time before they ever hit the bundle. The remaining `NEXT_PUBLIC_*` URLs above are non-sensitive endpoint configuration.
 
@@ -200,7 +204,7 @@ Before adding a new direct dependency:
 1. **Identify exposure.** `yarn why <pkg>` — direct or transitive? Which version is in our lockfile? Did it land in any code path that runs server-side (i.e. could it have read `BLOB_READ_WRITE_TOKEN`)?
 2. **Check the window.** When was the bad version published vs. when we last ran `yarn install` / deployed? If our lockfile predates the bad version, we are not shipping it in production — but any developer running `yarn install` fresh could pull it locally.
 3. **Pin to a safe version.** Edit `package.json` to a known-good version (or add a Yarn `resolutions` entry for transitive deps, following the exact-pinning rule in [§1](#1-exact-version-pinning-in-packagejson)). Commit lockfile.
-4. **Rotate every secret the build/runtime could have seen.** If the compromised version ran in any SSR invocation since it was published, rotate `BLOB_READ_WRITE_TOKEN`. If a postinstall script could have run on the build machine, also rotate `NEXT_PUBLIC_SUBGRAPH_API_KEY` and `NEXT_PUBLIC_GNOSIS_URL` (both embed keys), plus any Vercel deploy tokens and any npm/GitHub tokens attached to the build account. See [§7](#7-secrets-hygiene-in-the-build-environment) for the full enumeration.
+4. **Rotate every secret the build/runtime could have seen.** If the compromised version ran in any SSR or API-route invocation since it was published, rotate `BLOB_READ_WRITE_TOKEN` and `CRON_SECRET` (and `POLYGON_RPC_URL` if it embeds a key), and check that `leaderboard/<type>/snapshot.json` in Blob was written by the refresh (rebuild it with a manual refresh if in doubt). If a postinstall script could have run on the build machine, also rotate `NEXT_PUBLIC_SUBGRAPH_API_KEY` and `NEXT_PUBLIC_GNOSIS_URL` (both embed keys), plus any Vercel deploy tokens and any npm/GitHub tokens attached to the build account. See [§7](#7-secrets-hygiene-in-the-build-environment) for the full enumeration.
 5. **Redeploy.** Force a fresh build so production no longer serves any code influenced by the bad version.
 6. **Post-mortem.** Record the incident: what package, which version, how we detected it, time-to-mitigate, what leaked (if anything).
 

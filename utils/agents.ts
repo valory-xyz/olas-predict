@@ -1,4 +1,4 @@
-const phoneticSyllables = [
+export const phoneticSyllables = [
   'ba',
   'bi',
   'bu',

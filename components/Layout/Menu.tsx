@@ -5,6 +5,7 @@ import Link from 'next/link';
 import styled from 'styled-components';
 
 import { MENU_MAX_WIDTH } from 'constants/index';
+import { LEADERBOARD_PATH } from 'constants/leaderboard';
 import { COLOR, MEDIA_QUERY } from 'constants/theme';
 import { useDropdown } from 'hooks/useDropdown';
 
@@ -59,6 +60,22 @@ const Backdrop = styled.div.withConfig({
   z-index: 1000;
 `;
 
+const TopCard = styled(Flex)`
+  align-self: center;
+  margin: 56px 0 40px;
+  padding: 8px 8px 8px 16px;
+  border-radius: 12px;
+  background: ${COLOR.BLACK_TRANSPARENT_20};
+  backdrop-filter: blur(3px);
+  will-change: backdrop-filter;
+
+  .run-your-own-agent {
+    padding: 6px 12px;
+    border-radius: 8px;
+    background: ${COLOR.WHITE_TRANSPARENT_10};
+  }
+`;
+
 const MenuContent = ({ closeDropdown }: { closeDropdown?: () => void }) => (
   <>
     <Link href={'/questions'} onClick={closeDropdown}>
@@ -66,6 +83,9 @@ const MenuContent = ({ closeDropdown }: { closeDropdown?: () => void }) => (
     </Link>
     <Link href={'/agents'} onClick={closeDropdown}>
       Agents
+    </Link>
+    <Link href={LEADERBOARD_PATH} onClick={closeDropdown}>
+      Leaderboard
     </Link>
     <a
       target="_blank"
@@ -86,6 +106,23 @@ export const Menu = () => {
     </Card>
   );
 };
+
+/** Horizontal desktop menu, used by pages laid out without the side menu (the leaderboard) */
+export const TopMenu = () => (
+  <TopCard align="center" gap={24} wrap="wrap" justify="center">
+    <Image src={'/images/predict.svg'} width={32} height={32} alt="Predict icon" />
+    <Link href={'/questions'}>Questions</Link>
+    <Link href={'/agents'}>Agents</Link>
+    <Link href={LEADERBOARD_PATH}>Leaderboard</Link>
+    <a
+      target="_blank"
+      className="flex items-center run-your-own-agent"
+      href="https://olas.network/operate"
+    >
+      Run your own agent <ArrowRight className="ml-4" size={16} />
+    </a>
+  </TopCard>
+);
 
 export const MobileMenu = () => {
   const { isOpen, toggleDropdown, closeDropdown } = useDropdown();

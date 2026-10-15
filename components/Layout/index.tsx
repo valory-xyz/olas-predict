@@ -1,17 +1,21 @@
 import { Layout as AntdLayout } from 'antd';
+import { useRouter } from 'next/router';
 import { ReactNode } from 'react';
 import styled from 'styled-components';
 
 import { MENU_MAX_WIDTH } from 'constants/index';
+import { LEADERBOARD_PATH } from 'constants/leaderboard';
 import { COLOR, MEDIA_QUERY } from 'constants/theme';
 import { useScreen } from 'hooks/useScreen';
 
 import { Footer } from './Footer';
-import { Menu, MobileMenu } from './Menu';
+import { Menu, MobileMenu, TopMenu } from './Menu';
 
 const { Content, Sider } = AntdLayout;
 
-export const CustomLayout = styled(AntdLayout)`
+export const CustomLayout = styled(AntdLayout).withConfig({
+  shouldForwardProp: (prop) => !['isWide'].includes(prop),
+})<{ isWide?: boolean }>`
   min-height: 100vh;
   padding: 0 24px;
   overflow: auto;
@@ -52,14 +56,49 @@ export const CustomLayout = styled(AntdLayout)`
   ${MEDIA_QUERY.mobile} {
     padding: 0 16px;
   }
+
+  /*
+   * Wide pages have no side menu, so the window scrolls, not this element; as a scroll
+   * container it would still be the box sticky elements stick to, so the leaderboard's sticky
+   * header and pinned rows would never stick. Clipping keeps the horizontal clipping without that.
+   */
+  ${({ isWide }) =>
+    isWide &&
+    `
+    overflow: visible;
+    overflow-x: clip;
+
+    /*
+     * This element grows with the page here, so a background sized to it would re-scale
+     * (and visibly shift) whenever the content height changes, e.g. when an agent is pinned.
+     * Paint it on a layer fixed to the viewport instead.
+     */
+    background-image: none;
+    isolation: isolate;
+    &::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      background-color: ${COLOR.BACKGROUND};
+      background-image: url('/images/background.png');
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+    }
+  `}
 `;
 
-const ContentInner = styled.div`
+const LEADERBOARD_MAX_WIDTH = 1200;
+
+const ContentInner = styled.div.withConfig({
+  shouldForwardProp: (prop) => !['isWide'].includes(prop),
+})<{ isWide: boolean }>`
   display: flex;
   flex-direction: column;
   flex: auto;
   margin: 0 auto;
-  max-width: 720px;
+  max-width: ${({ isWide }) => (isWide ? `${LEADERBOARD_MAX_WIDTH}px` : '720px')};
   width: 100%;
 `;
 
@@ -79,19 +118,23 @@ type LayoutProps = {
 
 export const Layout = ({ children }: LayoutProps) => {
   const { isDesktop } = useScreen();
+  const { pathname } = useRouter();
+  const isWide = pathname === LEADERBOARD_PATH;
+  // Wide pages use the horizontal top menu from the design instead of the side menu
+  const hasSider = !!isDesktop && !isWide;
 
   return (
-    <CustomLayout>
-      <AntdLayout hasSider={isDesktop}>
-        {isDesktop && (
+    <CustomLayout isWide={isWide}>
+      <AntdLayout hasSider={hasSider}>
+        {hasSider && (
           <Sider width={MENU_MAX_WIDTH}>
             <Menu />
           </Sider>
         )}
         <Content>
-          <ContentInner>
+          <ContentInner isWide={isWide}>
             <BetaBanner>Beta</BetaBanner>
-            {!isDesktop && <MobileMenu />}
+            {isDesktop ? isWide && <TopMenu /> : <MobileMenu />}
             {children}
           </ContentInner>
           <Footer />
