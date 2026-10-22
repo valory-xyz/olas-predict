@@ -3,13 +3,13 @@ import { ArrowRight } from 'lucide-react';
 import styled from 'styled-components';
 
 import { CreatorAgents } from 'components/CreatorAgents';
+import { RunYourOwnAgentLink } from 'components/Layout/RunYourOwnAgentLink';
 import { MechAgents } from 'components/MechAgents';
 import { SEO } from 'components/SEO';
 import { TraderAgents } from 'components/TraderAgents';
 import { SEO_CONFIG } from 'constants/seo';
 import { COLOR } from 'constants/theme';
 import { useScreen } from 'hooks/useScreen';
-import { useTrackRunYourOwnAgent } from 'hooks/useTrackRunYourOwnAgent';
 
 const { Title, Paragraph } = Typography;
 
@@ -25,29 +25,26 @@ const StyledCard = styled(Card)`
   }
 `;
 
-const RunYourAgentHint = () => {
-  const trackRunYourOwnAgent = useTrackRunYourOwnAgent('agents_page');
-  return (
-    <StyledCard>
-      <Title level={4} className="m-0">
-        Excited to run your own AI agent?
-      </Title>
-      <Paragraph type="secondary" className="m-0">
-        <b>Pearl</b> is an all-in-one application designed to streamline your entry into the world
-        of autonomous agents.
-      </Paragraph>
-      <a
-        target="_blank"
-        className="flex items-center"
-        href=" https://olas.network/operate"
-        onClick={trackRunYourOwnAgent}
-      >
-        <b>Run your own agent </b>
-        <ArrowRight className="ml-4" size={20} />
-      </a>
-    </StyledCard>
-  );
-};
+const RunYourAgentHint = () => (
+  <StyledCard>
+    <Title level={4} className="m-0">
+      Excited to run your own AI agent?
+    </Title>
+    <Paragraph type="secondary" className="m-0">
+      <b>Pearl</b> is an all-in-one application designed to streamline your entry into the world of
+      autonomous agents.
+    </Paragraph>
+    <RunYourOwnAgentLink
+      location="agents_page"
+      target="_blank"
+      className="flex items-center"
+      href=" https://olas.network/operate"
+    >
+      <b>Run your own agent </b>
+      <ArrowRight className="ml-4" size={20} />
+    </RunYourOwnAgentLink>
+  </StyledCard>
+);
 
 const AgentsPage = () => {
   const { isMobile } = useScreen();

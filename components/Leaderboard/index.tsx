@@ -9,8 +9,9 @@ import { LeaderboardWindow, RankBy } from 'constants/leaderboard';
 import { LeaderboardRequestError, useLeaderboard } from 'hooks/useLeaderboard';
 import { useLeaderboardAgents } from 'hooks/useLeaderboardAgents';
 import { usePinnedAgents } from 'hooks/usePinnedAgents';
+import { useTrackEvent } from 'hooks/useTrackEvent';
 import type { LeaderboardAgentRecord, LeaderboardRow } from 'types/leaderboard';
-import { createSearchTracker, useTrackEvent } from 'utils/analytics';
+import { createSearchTracker } from 'utils/analytics';
 
 import { LeaderboardControls } from './LeaderboardControls';
 import { LeaderboardTable, PinnedRow } from './LeaderboardTable';

@@ -9,6 +9,12 @@ import {
   MIN_SETTLED_BETS_PER_WINDOW,
 } from '../constants/leaderboard.ts';
 import { generateAgentName } from '../utils/agentName.ts';
+import {
+  SEARCH_TRACK_DELAY_MS,
+  createPageviewTracker,
+  createSearchTracker,
+  trackEvent,
+} from '../utils/analytics.ts';
 import { computeSnapshot } from '../utils/leaderboard/compute.ts';
 import {
   SECONDS_PER_DAY,
@@ -1174,4 +1180,79 @@ test('a drop is refused, then accepted after it lasts; a height that went back n
   const later = checkPopulation(first.record, empty, t0 + 2 * ACCEPT_POPULATION_DROP_AFTER_MS);
   assert.match(later.refusal, /without Pearl agents/);
   assert.equal(later.record.pearlAgents, 100);
+});
+
+// Plausible tracking (`utils/analytics.ts`)
+
+test('analytics: each event is sent with its props and a normalized URL, never an address', () => {
+  const calls = [];
+  const plausible = (...args) => calls.push(args);
+  const page = (pathname) => ({ origin: 'https://predict.olas.network', pathname });
+  trackEvent(
+    plausible,
+    'Run Your Own Agent',
+    { location: 'side_menu', page: '/agents/[id]' },
+    page('/agents/0x0e2d480987a12c54b7d6c692a0c06f6b730ffdc8'),
+  );
+  trackEvent(plausible, 'Leaderboard Search', { agent_type: 'polystrat' }, page('/leaderboard'));
+  trackEvent(
+    plausible,
+    'Leaderboard Pin',
+    { action: 'unpin', agent_type: 'omenstrat' },
+    page('/leaderboard'),
+  );
+  assert.deepEqual(calls, [
+    [
+      'Run Your Own Agent',
+      {
+        props: { location: 'side_menu', page: '/agents/[id]' },
+        u: 'https://predict.olas.network/agents/[id]',
+      },
+    ],
+    [
+      'Leaderboard Search',
+      { props: { agent_type: 'polystrat' }, u: 'https://predict.olas.network/leaderboard' },
+    ],
+    [
+      'Leaderboard Pin',
+      {
+        props: { action: 'unpin', agent_type: 'omenstrat' },
+        u: 'https://predict.olas.network/leaderboard',
+      },
+    ],
+  ]);
+});
+
+test('analytics: a search counts once typing pauses, never per keystroke, empty or repeated', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let commits = 0;
+  const tracker = createSearchTracker(() => (commits += 1));
+  for (const value of ['a', 'ag', 'agent']) {
+    tracker.update(value);
+    t.mock.timers.tick(SEARCH_TRACK_DELAY_MS - 1);
+  }
+  assert.equal(commits, 0);
+  t.mock.timers.tick(1);
+  assert.equal(commits, 1);
+  tracker.update('agent '); // same term
+  tracker.flush(); // Enter
+  tracker.update('  '); // empty
+  t.mock.timers.tick(SEARCH_TRACK_DELAY_MS);
+  assert.equal(commits, 1);
+  tracker.update('bob');
+  tracker.flush(); // Enter commits at once
+  t.mock.timers.tick(SEARCH_TRACK_DELAY_MS);
+  assert.equal(commits, 2);
+});
+
+test('analytics: filter changes add no pageview; real navigations count once each', () => {
+  const sent = [];
+  const track = createPageviewTracker((path) => sent.push(path));
+  track('/leaderboard');
+  track('/leaderboard?agentType=polystrat&window=30d', { shallow: true });
+  track('/questions?state=closed');
+  track('/questions?state=opened', { shallow: true });
+  track('/leaderboard');
+  track('/agents/0xAbC0000000000000000000000000000000000001');
+  assert.deepEqual(sent, ['/leaderboard', '/questions', '/leaderboard', '/agents/[id]']);
 });

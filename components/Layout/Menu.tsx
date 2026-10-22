@@ -8,8 +8,9 @@ import { MENU_MAX_WIDTH } from 'constants/index';
 import { LEADERBOARD_PATH } from 'constants/leaderboard';
 import { COLOR, MEDIA_QUERY } from 'constants/theme';
 import { useDropdown } from 'hooks/useDropdown';
-import { useTrackRunYourOwnAgent } from 'hooks/useTrackRunYourOwnAgent';
 import type { RunYourOwnAgentLocation } from 'utils/analytics';
+
+import { RunYourOwnAgentLink } from './RunYourOwnAgentLink';
 
 const Card = styled(Flex)`
   max-width: ${MENU_MAX_WIDTH}px;
@@ -84,33 +85,28 @@ const MenuContent = ({
 }: {
   location: RunYourOwnAgentLocation;
   closeDropdown?: () => void;
-}) => {
-  const trackRunYourOwnAgent = useTrackRunYourOwnAgent(location);
-  return (
-    <>
-      <Link href={'/questions'} onClick={closeDropdown}>
-        Questions
-      </Link>
-      <Link href={'/agents'} onClick={closeDropdown}>
-        Agents
-      </Link>
-      <Link href={LEADERBOARD_PATH} onClick={closeDropdown}>
-        Leaderboard
-      </Link>
-      <a
-        target="_blank"
-        className="flex items-center"
-        href=" https://olas.network/operate"
-        onClick={() => {
-          trackRunYourOwnAgent();
-          closeDropdown?.();
-        }}
-      >
-        Run your own agent <ArrowRight className="ml-4" size={20} />
-      </a>
-    </>
-  );
-};
+}) => (
+  <>
+    <Link href={'/questions'} onClick={closeDropdown}>
+      Questions
+    </Link>
+    <Link href={'/agents'} onClick={closeDropdown}>
+      Agents
+    </Link>
+    <Link href={LEADERBOARD_PATH} onClick={closeDropdown}>
+      Leaderboard
+    </Link>
+    <RunYourOwnAgentLink
+      location={location}
+      target="_blank"
+      className="flex items-center"
+      href=" https://olas.network/operate"
+      onClick={closeDropdown}
+    >
+      Run your own agent <ArrowRight className="ml-4" size={20} />
+    </RunYourOwnAgentLink>
+  </>
+);
 
 export const Menu = () => {
   return (
@@ -122,25 +118,22 @@ export const Menu = () => {
 };
 
 /** Horizontal desktop menu, used by pages laid out without the side menu (the leaderboard) */
-export const TopMenu = () => {
-  const trackRunYourOwnAgent = useTrackRunYourOwnAgent('top_menu');
-  return (
-    <TopCard align="center" gap={24} wrap="wrap" justify="center">
-      <Image src={'/images/predict.svg'} width={32} height={32} alt="Predict icon" />
-      <Link href={'/questions'}>Questions</Link>
-      <Link href={'/agents'}>Agents</Link>
-      <Link href={LEADERBOARD_PATH}>Leaderboard</Link>
-      <a
-        target="_blank"
-        className="flex items-center run-your-own-agent"
-        href="https://olas.network/operate"
-        onClick={trackRunYourOwnAgent}
-      >
-        Run your own agent <ArrowRight className="ml-4" size={16} />
-      </a>
-    </TopCard>
-  );
-};
+export const TopMenu = () => (
+  <TopCard align="center" gap={24} wrap="wrap" justify="center">
+    <Image src={'/images/predict.svg'} width={32} height={32} alt="Predict icon" />
+    <Link href={'/questions'}>Questions</Link>
+    <Link href={'/agents'}>Agents</Link>
+    <Link href={LEADERBOARD_PATH}>Leaderboard</Link>
+    <RunYourOwnAgentLink
+      location="top_menu"
+      target="_blank"
+      className="flex items-center run-your-own-agent"
+      href="https://olas.network/operate"
+    >
+      Run your own agent <ArrowRight className="ml-4" size={16} />
+    </RunYourOwnAgentLink>
+  </TopCard>
+);
 
 export const MobileMenu = () => {
   const { isOpen, toggleDropdown, closeDropdown } = useDropdown();
