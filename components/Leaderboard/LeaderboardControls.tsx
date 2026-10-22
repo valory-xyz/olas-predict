@@ -48,6 +48,8 @@ type LeaderboardControlsProps = {
   onRankByChange: (rankBy: RankBy) => void;
   onWindowChange: (window: LeaderboardWindow) => void;
   onSearchChange: (search: string) => void;
+  /** Enter in the search box */
+  onSearchCommit: () => void;
 };
 
 export const LeaderboardControls = ({
@@ -59,6 +61,7 @@ export const LeaderboardControls = ({
   onRankByChange,
   onWindowChange,
   onSearchChange,
+  onSearchCommit,
 }: LeaderboardControlsProps) => (
   <Flex gap={16} wrap="wrap" align="center" justify="space-between">
     <Flex gap={16} wrap="wrap" align="center">
@@ -68,6 +71,7 @@ export const LeaderboardControls = ({
         prefix={<SearchOutlined />}
         value={search}
         onChange={(event) => onSearchChange(event.target.value)}
+        onPressEnter={onSearchCommit}
         aria-label="Search agents"
       />
       <Segmented<AgentType>
