@@ -45,6 +45,41 @@ test('trackEvent sends each event with its name and props', () => {
   ]);
 });
 
+test('trackEvent reports the page normalized, so no agent address reaches Plausible', () => {
+  const plausible = spy();
+  trackEvent(
+    plausible,
+    'Run Your Own Agent',
+    { location: 'side_menu', page: '/agents/[id]' },
+    {
+      origin: 'https://predict.olas.network',
+      pathname: '/agents/0x0e2d480987a12c54b7d6c692a0c06f6b730ffdc8',
+    },
+  );
+  trackEvent(
+    plausible,
+    'Leaderboard Pin',
+    { action: 'pin', agent_type: 'omenstrat' },
+    { origin: 'https://predict.olas.network', pathname: '/leaderboard' },
+  );
+  assert.deepEqual(plausible.calls, [
+    [
+      'Run Your Own Agent',
+      {
+        props: { location: 'side_menu', page: '/agents/[id]' },
+        u: 'https://predict.olas.network/agents/[id]',
+      },
+    ],
+    [
+      'Leaderboard Pin',
+      {
+        props: { action: 'pin', agent_type: 'omenstrat' },
+        u: 'https://predict.olas.network/leaderboard',
+      },
+    ],
+  ]);
+});
+
 test('search tracker: typing commits one search after the pause, not per keystroke', (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const onCommit = spy();

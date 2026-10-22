@@ -20,21 +20,33 @@ export type AnalyticsEventName = keyof AnalyticsEvents;
 
 export type RunYourOwnAgentLocation = 'side_menu' | 'top_menu' | 'mobile_menu' | 'agents_page';
 
-type PlausibleFn = (eventName: string, options?: { props?: Record<string, string> }) => void;
+type PlausibleFn = (
+  eventName: string,
+  options?: { props?: Record<string, string>; u?: string },
+) => void;
 
-/** Sends one custom event through `plausible`, with its props */
+/**
+ * Sends one custom event through `plausible`, with its props. With `page` (the current location),
+ * the event's URL is reported with a normalized path and no query, since Plausible would otherwise
+ * send the full URL, e.g. an agent's address on `/agents/{id}`.
+ */
 export const trackEvent = <E extends AnalyticsEventName>(
   plausible: PlausibleFn,
   eventName: E,
   props: AnalyticsEvents[E],
-) => plausible(eventName, { props });
+  page?: Pick<Location, 'origin' | 'pathname'>,
+) =>
+  plausible(
+    eventName,
+    page ? { props, u: `${page.origin}${normalizePageviewPath(page.pathname)}` } : { props },
+  );
 
-/** `trackEvent` bound to next-plausible's `usePlausible` */
+/** `trackEvent` bound to next-plausible's `usePlausible`, reporting the current page normalized */
 export const useTrackEvent = () => {
   const plausible = usePlausible();
   return useCallback(
     <E extends AnalyticsEventName>(eventName: E, props: AnalyticsEvents[E]) =>
-      trackEvent(plausible as PlausibleFn, eventName, props),
+      trackEvent(plausible as PlausibleFn, eventName, props, window.location),
     [plausible],
   );
 };
