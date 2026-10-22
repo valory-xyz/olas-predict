@@ -1245,13 +1245,14 @@ test('analytics: a search counts once typing pauses, never per keystroke, empty 
   assert.equal(commits, 2);
 });
 
-test('analytics: filter changes add no pageview; real navigations count once each', () => {
+test('analytics: filter and page changes add no pageview; real navigations count once each', () => {
   const sent = [];
   const track = createPageviewTracker((path) => sent.push(path));
   track('/leaderboard');
   track('/leaderboard?agentType=polystrat&window=30d', { shallow: true });
   track('/questions?state=closed');
   track('/questions?state=opened', { shallow: true });
+  track('/questions?state=opened&page=2', { shallow: true });
   track('/leaderboard');
   track('/agents/0xAbC0000000000000000000000000000000000001');
   assert.deepEqual(sent, ['/leaderboard', '/questions', '/leaderboard', '/agents/[id]']);
