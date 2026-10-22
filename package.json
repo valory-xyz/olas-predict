@@ -11,7 +11,7 @@
     "license-check": "node scripts/license-check.mjs",
     "license-check:test": "node --test scripts/license-check.test.mjs",
     "test:achievement-payout": "node --experimental-strip-types --test scripts/achievement-payout.test.mjs",
-    "test:leaderboard": "node --experimental-strip-types --experimental-test-module-mocks --import ./scripts/ts-resolve.mjs --test scripts/leaderboard.test.mjs scripts/leaderboard-wiring.test.mjs",
+    "test:leaderboard": "node --experimental-strip-types --experimental-test-module-mocks --import ./scripts/ts-resolve.mjs --test scripts/leaderboard.test.mjs scripts/leaderboard-wiring.test.mjs scripts/analytics.test.mjs",
     "analyze": "ANALYZE=true next build"
   },
   "dependencies": {
