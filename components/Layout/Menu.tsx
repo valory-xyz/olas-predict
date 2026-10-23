@@ -8,6 +8,9 @@ import { MENU_MAX_WIDTH } from 'constants/index';
 import { LEADERBOARD_PATH } from 'constants/leaderboard';
 import { COLOR, MEDIA_QUERY } from 'constants/theme';
 import { useDropdown } from 'hooks/useDropdown';
+import type { RunYourOwnAgentLocation } from 'utils/analytics';
+
+import { RunYourOwnAgentLink } from './RunYourOwnAgentLink';
 
 const Card = styled(Flex)`
   max-width: ${MENU_MAX_WIDTH}px;
@@ -76,7 +79,13 @@ const TopCard = styled(Flex)`
   }
 `;
 
-const MenuContent = ({ closeDropdown }: { closeDropdown?: () => void }) => (
+const MenuContent = ({
+  location,
+  closeDropdown,
+}: {
+  location: RunYourOwnAgentLocation;
+  closeDropdown?: () => void;
+}) => (
   <>
     <Link href={'/questions'} onClick={closeDropdown}>
       Questions
@@ -87,14 +96,15 @@ const MenuContent = ({ closeDropdown }: { closeDropdown?: () => void }) => (
     <Link href={LEADERBOARD_PATH} onClick={closeDropdown}>
       Leaderboard
     </Link>
-    <a
+    <RunYourOwnAgentLink
+      location={location}
       target="_blank"
       className="flex items-center"
       href=" https://olas.network/operate"
       onClick={closeDropdown}
     >
       Run your own agent <ArrowRight className="ml-4" size={20} />
-    </a>
+    </RunYourOwnAgentLink>
   </>
 );
 
@@ -102,7 +112,7 @@ export const Menu = () => {
   return (
     <Card vertical gap={16}>
       <Image src={'/images/predict.svg'} width={40} height={40} alt="Predict icon" />
-      <MenuContent />
+      <MenuContent location="side_menu" />
     </Card>
   );
 };
@@ -114,13 +124,14 @@ export const TopMenu = () => (
     <Link href={'/questions'}>Questions</Link>
     <Link href={'/agents'}>Agents</Link>
     <Link href={LEADERBOARD_PATH}>Leaderboard</Link>
-    <a
+    <RunYourOwnAgentLink
+      location="top_menu"
       target="_blank"
       className="flex items-center run-your-own-agent"
       href="https://olas.network/operate"
     >
       Run your own agent <ArrowRight className="ml-4" size={16} />
-    </a>
+    </RunYourOwnAgentLink>
   </TopCard>
 );
 
@@ -134,7 +145,7 @@ export const MobileMenu = () => {
         onOpenChange={toggleDropdown}
         dropdownRender={() => (
           <MobileCardContent vertical gap={16}>
-            <MenuContent closeDropdown={closeDropdown} />
+            <MenuContent location="mobile_menu" closeDropdown={closeDropdown} />
           </MobileCardContent>
         )}
       >

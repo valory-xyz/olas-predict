@@ -73,7 +73,8 @@ const QuestionsPage = () => {
     }
 
     const newParams = params.toString();
-    router.replace(`${newParams ? `?${newParams}` : ''}`);
+    // Shallow, so a filter change is not counted as another pageview
+    router.replace(`${newParams ? `?${newParams}` : ''}`, undefined, { shallow: true });
   };
 
   return (

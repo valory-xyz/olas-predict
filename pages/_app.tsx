@@ -3,7 +3,7 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import PlausibleProvider from 'next-plausible';
 import { type AppProps } from 'next/app';
 import { useRouter } from 'next/router';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 import ErrorBoundary from 'components/ErrorBoundary';
 import { Layout } from 'components/Layout';
@@ -11,6 +11,7 @@ import { SEO } from 'components/SEO';
 import { AutonolasThemeProvider } from 'components/Theme';
 import { GlobalStyle } from 'components/Theme/GlobalStyle';
 import { OLAS_PREDICT_DOMAIN } from 'constants/index';
+import { createPageviewTracker } from 'utils/analytics';
 
 const queryClient = new QueryClient();
 
@@ -24,46 +25,31 @@ type WindowWithPlausible = Window & {
 };
 
 /**
- * Normalizes dynamic routes for Plausible tracking
- * - /questions/{id} -> /questions/[id]
- * - /agents/{id} -> /agents/[id]
- * - Other routes remain unchanged
- */
-const normalizePath = (pathname: string): string =>
-  pathname
-    .replace(/^\/questions\/[^/]+/, '/questions/[id]')
-    .replace(/^\/agents\/[^/]+/, '/agents/[id]');
-
-/**
- * Component that tracks pageviews with normalized paths
+ * Tracks pageviews with normalized paths (see `createPageviewTracker`): the first one once the
+ * router is ready, then one per route change, except shallow ones that keep the path
  */
 const PageViewTracker = () => {
   const router = useRouter();
+  const { isReady, events } = router;
+  const asPathRef = useRef(router.asPath);
+  asPathRef.current = router.asPath;
 
   useEffect(() => {
-    const handleRouteChange = (url: string) => {
-      const pathname = url.startsWith('http') ? new URL(url).pathname : url.split('?')[0];
+    if (!isReady) return;
 
-      const normalizedPath = normalizePath(pathname);
+    const track = createPageviewTracker((url) =>
+      (window as WindowWithPlausible).plausible?.('pageview', { url }),
+    );
+    track(asPathRef.current);
 
-      const windowWithPlausible = window as WindowWithPlausible;
-      if (windowWithPlausible.plausible) {
-        windowWithPlausible.plausible('pageview', { url: normalizedPath });
-      }
-    };
-
-    // Track initial pageview when router is ready
-    if (router.isReady) {
-      handleRouteChange(router.asPath);
-    }
-
-    // Track route changes
-    router.events.on('routeChangeComplete', handleRouteChange);
+    const handleRouteChange = (url: string, { shallow }: { shallow: boolean }) =>
+      track(url, { shallow });
+    events.on('routeChangeComplete', handleRouteChange);
 
     return () => {
-      router.events.off('routeChangeComplete', handleRouteChange);
+      events.off('routeChangeComplete', handleRouteChange);
     };
-  }, [router]);
+  }, [isReady, events]);
 
   return null;
 };

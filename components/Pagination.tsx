@@ -24,7 +24,8 @@ export const Pagination = ({ hasMore }: PaginationProps) => {
     else params.delete(PAGE_QUERY_PARAM);
 
     const newParams = params.toString();
-    router.replace(`${newParams ? `?${newParams}` : ''}`);
+    // Shallow, so a page change is not counted as another pageview
+    router.replace(`${newParams ? `?${newParams}` : ''}`, undefined, { shallow: true });
 
     const layoutDiv = document.querySelector('.ant-layout');
     layoutDiv?.scrollTo({ top: 0 });

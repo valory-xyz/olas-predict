@@ -9,7 +9,9 @@ import { LeaderboardWindow, RankBy } from 'constants/leaderboard';
 import { LeaderboardRequestError, useLeaderboard } from 'hooks/useLeaderboard';
 import { useLeaderboardAgents } from 'hooks/useLeaderboardAgents';
 import { usePinnedAgents } from 'hooks/usePinnedAgents';
+import { useTrackEvent } from 'hooks/useTrackEvent';
 import type { LeaderboardAgentRecord, LeaderboardRow } from 'types/leaderboard';
+import { createSearchTracker } from 'utils/analytics';
 
 import { LeaderboardControls } from './LeaderboardControls';
 import { LeaderboardTable, PinnedRow } from './LeaderboardTable';
@@ -90,6 +92,20 @@ export const Leaderboard = ({
   const [searchInput, setSearchInput] = useState('');
   const search = useDebouncedValue(searchInput.trim(), SEARCH_DEBOUNCE_MS);
 
+  // Analytics: a search counts once typing pauses (or on Enter), never per keystroke
+  const trackEvent = useTrackEvent();
+  const trackSearchRef = useRef<() => void>();
+  trackSearchRef.current = () => trackEvent('Leaderboard Search', { agent_type: agentType });
+  const [searchTracker] = useState(() => createSearchTracker(() => trackSearchRef.current?.()));
+  useEffect(() => () => searchTracker.cancel(), [searchTracker]);
+  const onSearchChange = useCallback(
+    (value: string) => {
+      setSearchInput(value);
+      searchTracker.update(value);
+    },
+    [searchTracker],
+  );
+
   // Messages from the hook render inside the theme, so they match the dark page
   const [messageApi, messageHolder] = message.useMessage();
   const {
@@ -168,9 +184,15 @@ export const Leaderboard = ({
   const firstPage = list.data?.pages[0];
 
   const onTogglePin = useCallback(
-    (address: string) =>
-      isPinned(address, agentType) ? removePin(address, agentType) : addPin(address, agentType),
-    [isPinned, addPin, removePin, agentType],
+    (address: string) => {
+      const wasPinned = isPinned(address, agentType);
+      trackEvent('Leaderboard Pin', {
+        action: wasPinned ? 'unpin' : 'pin',
+        agent_type: agentType,
+      });
+      return wasPinned ? removePin(address, agentType) : addPin(address, agentType);
+    },
+    [isPinned, addPin, removePin, agentType, trackEvent],
   );
 
   const isUnavailable = list.error instanceof LeaderboardRequestError && list.error.status === 503;
@@ -201,7 +223,8 @@ export const Leaderboard = ({
         onAgentTypeChange={onAgentTypeChange}
         onRankByChange={onRankByChange}
         onWindowChange={onWindowChange}
-        onSearchChange={setSearchInput}
+        onSearchChange={onSearchChange}
+        onSearchCommit={searchTracker.flush}
       />
       <LeaderboardCard type="ongoing">
         {hasListFailed ? (
@@ -231,7 +254,7 @@ export const Leaderboard = ({
               pinnedRows={pinnedRows}
               isLoading={isListLoading}
               search={search}
-              onClearSearch={() => setSearchInput('')}
+              onClearSearch={() => onSearchChange('')}
               hasMore={!!list.hasNextPage}
               isLoadingMore={list.isFetchingNextPage}
               hasLoadMoreFailed={list.isFetchNextPageError && !isRestarting}

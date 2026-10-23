@@ -3,6 +3,7 @@ import { ArrowRight } from 'lucide-react';
 import styled from 'styled-components';
 
 import { CreatorAgents } from 'components/CreatorAgents';
+import { RunYourOwnAgentLink } from 'components/Layout/RunYourOwnAgentLink';
 import { MechAgents } from 'components/MechAgents';
 import { SEO } from 'components/SEO';
 import { TraderAgents } from 'components/TraderAgents';
@@ -33,10 +34,15 @@ const RunYourAgentHint = () => (
       <b>Pearl</b> is an all-in-one application designed to streamline your entry into the world of
       autonomous agents.
     </Paragraph>
-    <a target="_blank" className="flex items-center" href=" https://olas.network/operate">
+    <RunYourOwnAgentLink
+      location="agents_page"
+      target="_blank"
+      className="flex items-center"
+      href=" https://olas.network/operate"
+    >
       <b>Run your own agent </b>
       <ArrowRight className="ml-4" size={20} />
-    </a>
+    </RunYourOwnAgentLink>
   </StyledCard>
 );
 
