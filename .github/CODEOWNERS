@@ -1,5 +1,3 @@
-# Paths listed without owners intentionally have no assigned code owner.
-
 # Code owners for olas-predict.
 # https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
 #
@@ -10,7 +8,7 @@
 # A PR matching multiple rules uses the LAST matching rule.
 
 # Default owner -- every change
-*
+*                                  @atepem
 
 # Supply-chain config -- security owners must approve any change.
 # Mirrors the pattern used in olas-website, predict-api, and valory-website.
